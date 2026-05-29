@@ -135,7 +135,7 @@ def quantize_model(args):
         ds = ds.shuffle(seed=42).select(range(min(args.num_calibration_samples, len(ds))))
 
         def preprocess(example):
-            text = example.get("query", "") or example.get("text", "")
+            text = example.get("query", "") + " " + example.get("response", "")
             return {"text": text}
 
         ds = ds.map(preprocess, remove_columns=ds.column_names)
