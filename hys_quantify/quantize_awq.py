@@ -59,8 +59,10 @@ def copy_config_files(official_model, output_path):
 
 def quantize_model(args):
     """执行 AWQ 量化"""
-    from llmcompressor.modifiers.quantization import AWQModifier
-    from llmcompressor.transformers import oneshot
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from llmcompressor import oneshot
+    from llmcompressor.modifiers.quantization import QuantizationModifier
+    from llmcompressor.modifiers.transform.awq import AWQModifier
 
     print('=' * 60)
     print('AWQ 量化脚本（llm-compressor）')
@@ -79,28 +81,46 @@ def quantize_model(args):
     print(f'分组大小: {args.group_size}')
     print(f'校准数据集: {args.dataset}')
 
-    # 创建 AWQ 量化修饰器
-    print('\n步骤 1: 配置 AWQ 量化...')
-    awq_modifier = AWQModifier(
-        targets="Linear",
-        scheme=f"W{args.bits}A8",
-        group_size=args.group_size,
+    # 加载模型和分词器
+    print('\n步骤 1: 加载模型...')
+    model = AutoModelForCausalLM.from_pretrained(
+        str(model_path),
+        dtype="auto",
+        trust_remote_code=True,
+    )
+    tokenizer = AutoTokenizer.from_pretrained(
+        str(model_path),
+        trust_remote_code=True,
     )
 
+    # 配置 AWQ + 量化修饰器
+    print('步骤 2: 配置 AWQ 量化...')
+    awq_modifier = AWQModifier(duo_scaling="both")
+    quantization_modifier = QuantizationModifier(
+        ignore=["lm_head"],
+        scheme=f"W{args.bits}A16_ASYM",
+        targets=["Linear"],
+    )
+    recipe = [awq_modifier, quantization_modifier]
+
     # 执行量化
-    print('步骤 2: 执行量化...')
+    print('步骤 3: 执行量化...')
     oneshot(
-        model=str(model_path),
+        model=model,
         dataset=args.dataset,
-        recipe=[awq_modifier],
-        output_dir=str(output_path),
+        recipe=recipe,
         max_seq_length=args.max_seq_length,
         num_calibration_samples=args.num_calibration_samples,
     )
 
+    # 保存模型
+    print('步骤 4: 保存量化模型...')
+    model.save_pretrained(str(output_path), save_compressed=True)
+    tokenizer.save_pretrained(str(output_path))
+
     # 复制配置文件
     if args.copy_config and args.official_model:
-        print('\n步骤 3: 复制配置文件...')
+        print('\n步骤 5: 复制配置文件...')
         copy_config_files(args.official_model, output_path)
 
     # 保存量化信息
