@@ -59,6 +59,7 @@ def copy_config_files(official_model, output_path):
 
 def quantize_model(args):
     """执行 AWQ 量化"""
+    import swift  # 注册 qwen3_5 等自定义模型类型到 transformers
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from llmcompressor import oneshot
     from llmcompressor.modifiers.quantization import QuantizationModifier
