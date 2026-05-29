@@ -108,8 +108,21 @@ def quantize_model(args):
     awq_modifier = AWQModifier(duo_scaling="both")
     quantization_modifier = QuantizationModifier(
         ignore=["lm_head"],
-        scheme=f"W{args.bits}A16_ASYM",
-        targets=["Linear"],
+        config_groups={
+            "group_0": {
+                "targets": ["Linear"],
+                "weights": {
+                    "num_bits": args.bits,
+                    "type": "int",
+                    "symmetric": True,
+                    "group_size": args.group_size,
+                    "strategy": "group",
+                    "dynamic": False,
+                    "actorder": None,
+                    "observer": "mse",
+                },
+            }
+        },
     )
     recipe = [awq_modifier, quantization_modifier]
 
