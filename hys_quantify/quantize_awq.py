@@ -113,24 +113,42 @@ def quantize_model(args):
     )
     recipe = [awq_modifier, quantization_modifier]
 
+    # 加载校准数据集
+    print('步骤 3: 加载校准数据集...')
+    dataset_path = Path(args.dataset)
+    if dataset_path.exists():
+        from datasets import load_dataset
+        ds = load_dataset("json", data_files=str(dataset_path), split="train")
+        ds = ds.shuffle(seed=42).select(range(min(args.num_calibration_samples, len(ds))))
+
+        def preprocess(example):
+            text = example.get("query", "") + " " + example.get("response", "")
+            return {"text": text}
+
+        ds = ds.map(preprocess, remove_columns=ds.column_names)
+        dataset = ds
+        print(f'加载本地数据集: {dataset_path} ({len(ds)} 条)')
+    else:
+        dataset = args.dataset
+
     # 执行量化
-    print('步骤 3: 执行量化...')
+    print('步骤 4: 执行量化...')
     oneshot(
         model=model,
-        dataset=args.dataset,
+        dataset=dataset,
         recipe=recipe,
         max_seq_length=args.max_seq_length,
         num_calibration_samples=args.num_calibration_samples,
     )
 
     # 保存模型
-    print('步骤 4: 保存量化模型...')
+    print('步骤 5: 保存量化模型...')
     model.save_pretrained(str(output_path), save_compressed=True)
     tokenizer.save_pretrained(str(output_path))
 
     # 复制配置文件
     if args.copy_config and args.official_model:
-        print('\n步骤 5: 复制配置文件...')
+        print('\n步骤 6: 复制配置文件...')
         copy_config_files(args.official_model, output_path)
 
     # 保存量化信息
