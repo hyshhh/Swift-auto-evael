@@ -84,11 +84,20 @@ def quantize_model(args):
 
     # 加载模型和分词器
     print('\n步骤 1: 加载模型...')
-    model = AutoModelForCausalLM.from_pretrained(
-        str(model_path),
-        dtype="auto",
-        trust_remote_code=True,
-    )
+    try:
+        from transformers import Qwen3_5ForConditionalGeneration
+        model = Qwen3_5ForConditionalGeneration.from_pretrained(
+            str(model_path),
+            dtype="auto",
+            trust_remote_code=True,
+        )
+    except ImportError:
+        from transformers import AutoModelForCausalLM
+        model = AutoModelForCausalLM.from_pretrained(
+            str(model_path),
+            dtype="auto",
+            trust_remote_code=True,
+        )
     tokenizer = AutoTokenizer.from_pretrained(
         str(model_path),
         trust_remote_code=True,
