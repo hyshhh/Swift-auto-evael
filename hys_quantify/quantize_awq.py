@@ -62,7 +62,7 @@ def quantize_model(args):
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from llmcompressor import oneshot
     from llmcompressor.modifiers.quantization import QuantizationModifier
-    from llmcompressor.modifiers.transform.awq import AWQModifier
+    from llmcompressor.modifiers.awq import AWQModifier
 
     print('=' * 60)
     print('AWQ 量化脚本（llm-compressor）')
