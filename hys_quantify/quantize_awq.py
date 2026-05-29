@@ -62,7 +62,6 @@ def quantize_model(args):
     import swift  # 注册 qwen3_5 等自定义模型类型到 transformers
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from llmcompressor import oneshot
-    from llmcompressor.modifiers.quantization import QuantizationModifier
     from llmcompressor.modifiers.awq import AWQModifier
 
     print('=' * 60)
@@ -105,26 +104,13 @@ def quantize_model(args):
 
     # 配置 AWQ + 量化修饰器
     print('步骤 2: 配置 AWQ 量化...')
-    awq_modifier = AWQModifier(duo_scaling="both")
-    quantization_modifier = QuantizationModifier(
+    awq_modifier = AWQModifier(
         ignore=["lm_head"],
-        config_groups={
-            "group_0": {
-                "targets": ["Linear"],
-                "weights": {
-                    "num_bits": args.bits,
-                    "type": "int",
-                    "symmetric": True,
-                    "group_size": args.group_size,
-                    "strategy": "group",
-                    "dynamic": False,
-                    "actorder": None,
-                    "observer": "mse",
-                },
-            }
-        },
+        scheme=f"W{args.bits}A16",
+        targets=["Linear"],
+        duo_scaling="both",
     )
-    recipe = [awq_modifier, quantization_modifier]
+    recipe = [awq_modifier]
 
     # 加载校准数据集
     print('步骤 3: 加载校准数据集...')
