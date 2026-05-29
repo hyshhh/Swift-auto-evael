@@ -1,185 +1,145 @@
-# SWIFT (Scalable lightWeight Infrastructure for Fine-Tuning)
+# Swift-auto-evael: Qwen3.5 模型微调与部署解决方案
 
-<p align="center">
-    <br>
-    <img src="asset/banner.png"/>
-    <br>
-<p>
-<p align="center">
-<a href="https://modelscope.cn/home">ModelScope Community Website</a>
-<br>
-        <a href="README_CN.md">中文</a> &nbsp ｜ &nbsp English &nbsp
-</p>
+## 项目背景
 
-<p align="center">
-<img src="https://img.shields.io/badge/python-3.12-5be.svg">
-<img src="https://img.shields.io/badge/pytorch-%E2%89%A52.0-orange.svg">
-<a href="https://github.com/modelscope/modelscope/"><img src="https://img.shields.io/badge/modelscope-%E2%89%A51.23-5D91D4.svg"></a>
-<a href="https://pypi.org/project/ms-swift/"><img src="https://badge.fury.io/py/ms-swift.svg"></a>
-<a href="https://github.com/modelscope/ms-swift/blob/main/LICENSE"><img src="https://img.shields.io/github/license/modelscope/ms-swift"></a>
-<a href="https://pepy.tech/project/ms-swift"><img src="https://pepy.tech/badge/ms-swift"></a>
-<a href="https://github.com/modelscope/ms-swift/pulls"><img src="https://img.shields.io/badge/PR-welcome-55EB99.svg"></a>
-</p>
+本项目旨在解决 **ms-swift 框架合并 LoRA 权重后与 vLLM 推理引擎的兼容性问题**。
 
-<p align="center">
-<a href="https://trendshift.io/repositories/11937" target="_blank"><img src="https://trendshift.io/api/badge/repositories/11937" alt="modelscope/ms-swift | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-</p>
+### 问题描述
 
-<p align="center">
-        <a href="https://arxiv.org/abs/2408.05517">Paper</a> &nbsp ｜ <a href="https://swift.readthedocs.io/en/latest/">English Documentation</a> &nbsp ｜ &nbsp <a href="https://swift.readthedocs.io/zh-cn/latest/">中文文档</a> &nbsp
-</p>
+在使用 ms-swift 框架对 Qwen3.5 模型进行 LoRA 微调后，通过 `swift export --merge_lora` 命令合并权重时，会遇到以下问题：
 
-## 📖 Table of Contents
-- [Groups](#-Groups)
-- [Introduction](#-introduction)
-- [News](#-news)
-- [Installation](#%EF%B8%8F-installation)
-- [Quick Start](#-quick-Start)
-- [Usage](#-Usage)
-- [License](#-License)
-- [Citation](#-citation)
+1. **配置文件缺失**：合并后的模型缺少 `video_preprocessor_config.json` 等关键配置文件
+2. **vLLM 不兼容**：vLLM 对 Qwen3.5 模型架构的支持不完整，导致推理失败
+3. **参数加载异常**：部分层的权重参数无法正确加载
 
+### 解决方案
 
-## ☎ Groups
+本项目提供了一套完整的解决方案：
 
-You can contact us and communicate with us by adding our group:
+1. **正确的合并流程**：使用 `swift export` 命令合并 LoRA 权重
+2. **配置文件修复**：从官方模型复制缺失的配置文件
+3. **vLLM 推理配置**：正确配置 vLLM 服务参数
+4. **评测脚本**：提供基于 vLLM API 的行为识别评测脚本
 
+---
 
-[Discord Group](https://discord.gg/yeN59wxjwe)              |  WeChat Group
-:-------------------------:|:-------------------------:
-<img src="asset/discord_qr.jpg" width="200" height="200">  |  <img src="asset/wechat.png" width="200" height="200">
+## 目录
 
+- [环境要求](#环境要求)
+- [基础推理](#1-基础推理lora-动态叠加)
+- [合并 LoRA 权重](#2-合并-lora-权重)
+- [修复合并后的模型配置](#3-修复合并后的模型配置)
+- [使用 VLLM 推理](#4-使用-vllm-推理合并后的模型)
+- [SFT 训练命令](#5-sft-训练命令)
+- [关键参数说明](#6-关键参数说明)
+- [训练指标说明](#7-训练指标说明)
+- [行为识别评测脚本](#8-行为识别评测脚本eval_behaviorpy)
 
-## 📝 Introduction
-🍲 **ms-swift** is a large model and multimodal large model fine-tuning and deployment framework provided by the ModelScope community. It now supports training (pre-training, fine-tuning, human alignment), inference, evaluation, quantization, and deployment for 600+ text-only large models and 400+ multimodal large models. Large models include: Qwen3, Qwen3.5, InternLM3, GLM4.5, Mistral, DeepSeek-R1, Llama4, etc. Multimodal large models include: Qwen3-VL, Qwen3-Omni, Llava, InternVL3.5, MiniCPM-V-4, Ovis2.5, GLM4.5-V, DeepSeek-VL2, etc.
+---
 
-🍔 In addition, ms-swift integrates the latest training technologies, including Megatron parallelism techniques such as TP, PP, CP, EP to accelerate training, as well as numerous GRPO algorithm family reinforcement learning algorithms including: GRPO, DAPO, GSPO, SAPO, CISPO, RLOO, Reinforce++, etc. to enhance model intelligence. ms-swift supports a wide range of training tasks, including preference learning algorithms such as DPO, KTO, RM, CPO, SimPO, ORPO, as well as Embedding, Reranker, and sequence classification tasks. ms-swift provides full-pipeline support for large model training, including acceleration for inference, evaluation, and deployment modules using vLLM, SGLang, and LMDeploy, as well as model quantization using GPTQ, AWQ, BNB, and FP8 technologies.
+## 环境要求
 
-**Why Choose ms-swift?**
+| 组件 | 版本要求 | 推荐版本 |
+|------|----------|----------|
+| Python | >=3.10 | 3.12 |
+| CUDA | >=12.0 | 12.4/12.8 |
+| PyTorch | >=2.0 | 2.8.0 |
+| transformers | >=4.33,<5.6.0 | 4.57.6 |
+| vllm | >=0.5.1 | 0.19.0 |
 
-- 🍎 **Model Types**: Supports **600+ text-only large models**, **400+ multimodal large models**, and All-to-All full modality models from training to deployment full pipeline, with Day-0 support for popular models.
-- **Dataset Types**: Built-in 150+ datasets for pre-training, fine-tuning, human alignment, multimodal and various other tasks, with support for custom datasets. Users only need to prepare datasets for one-click training.
-- **Hardware Support**: Supports A10/A100/H100, RTX series, T4/V100, CPU, MPS, and domestic hardware Ascend NPU, etc.
-- **Lightweight Training**: Supports lightweight fine-tuning methods such as LoRA, QLoRA, DoRA, LoRA+, LLaMAPro, LongLoRA, LoRA-GA, ReFT, RS-LoRA, Adapter, LISA, etc.
-- **Quantized Training**: Supports training on BNB, AWQ, GPTQ, AQLM, HQQ, EETQ quantized models, requiring only 9GB training resources for 7B models.
-- **Memory Optimization**: GaLore, Q-Galore, UnSloth, Liger-Kernel, Flash-Attention 2/3, and **Ulysses and Ring-Attention sequence parallelism techniques** support, reducing memory consumption for long-text training.
-- **Distributed Training**: Supports distributed data parallelism (DDP), device_map simple model parallelism, DeepSpeed ZeRO2 ZeRO3, FSDP/FSDP2, and Megatron distributed training technologies.
-- 🍓 **Multimodal Training**: Supports multimodal packing technology to improve training speed by 100%+, supports mixed modality data training with text, images, video and audio, and supports independent control of vit/aligner/llm.
-- **Agent Training**: Supports Agent templates, allowing one dataset to be used for training different models.
-- 🍊 **Training Tasks**: Supports pre-training and instruction fine-tuning, as well as training tasks such as DPO, GKD, KTO, RM, CPO, SimPO, ORPO, and supports **Embedding/Reranker** and sequence classification tasks.
-- 🥥 **Megatron Parallelism**: Provides TP/PP/SP/CP/ETP/EP/VPP parallel strategies to significantly boost **MoE model training speed**. Supports full-parameter and LoRA training methods for 300+ pure text large models and 100+ multimodal large models. Supports CPT/SFT/GRPO/DPO/KTO/RM training tasks.
-- 🍉 **Reinforcement Learning**: Built-in **rich GRPO family algorithms**, including GRPO, DAPO, GSPO, SAPO, CISPO, CHORD, RLOO, Reinforce++, etc. Supports synchronous and asynchronous vLLM engine inference acceleration, with extensible reward functions, multi-turn inference Schedulers, and environments through plugins.
-- **Full-Pipeline Capabilities**: Covers the entire workflow of training, inference, evaluation, quantization, and deployment.
-- **UI Training**: Provides Web-UI interface for training, inference, evaluation, and quantization, completing the full pipeline for large models.
-- **Inference Acceleration**: Supports Transformers, vLLM, SGLang, and LmDeploy inference acceleration engines, providing OpenAI interfaces for accelerating inference, deployment, and evaluation modules.
-- **Model Evaluation**: Uses EvalScope as the evaluation backend, supporting 100+ evaluation datasets for evaluating text-only and multimodal models.
-- **Model Quantization**: Supports quantization export for AWQ, GPTQ, FP8, and BNB. Exported models support inference acceleration using vLLM/SGLang/LmDeploy.
+---
 
+## 1. 基础推理（LoRA 动态叠加）
 
-## 🎉 News
-- 🎁 2026.03.03: **ms-swift v4.0** major version is officially released. For release notes, please refer to [here](https://github.com/modelscope/ms-swift/releases/tag/v4.0.0). You can provide your suggestions to us in [this issue](https://github.com/modelscope/ms-swift/issues/7250). Thank you for your support.
-- 🎁 2025.11.14: Megatron GRPO is now available!  Check out the [docs](./docs/source_en/Megatron-SWIFT/GRPO.md) and [examples](examples/megatron/grpo).
-- 🎁 2025.11.04: Support for [Mcore-Bridge](docs/source_en/Megatron-SWIFT/Mcore-Bridge.md), making Megatron training as simple and easy to use as transformers.
-- 🎁 2025.10.28: Ray [here](docs/source_en/Instruction/Ray.md).
-- 🎁 2025.09.07: Added support for CHORD training algorithm. See the [documentation](./docs/source_en/Instruction/GRPO/AdvancedResearch/CHORD.md).
-- 🎁 2025.09.06: Ulysses can now be used with ring-attention, allowing sequences to be sharded into any number of chunks (no longer limited by the number of heads). The argument remains `--sequence_parallel_size N`.
-- 🎁 2025.09.02: Megatron-SWIFT now supports multimodal model training. Documentation can be found [here](./docs/source_en/Megatron-SWIFT/Multimodal-Model.md).
-- 🎁 2025.08.12: Support [Dynamic Fine-Tuning](https://arxiv.org/abs/2508.05629)(DFT) in SFT training, use parameter `--enable_dft_loss true`. Training scripts can be found [here](https://github.com/modelscope/ms-swift/blob/main/examples/train/full/dft.sh).
-- 🎁 2025.07.09: Megatron-SWIFT supports LoRA training. Compared to ms-swift, it achieves significant speedup on MoE models. Training scripts can be found [here](https://github.com/modelscope/ms-swift/blob/main/examples/megatron/lora).
-- 🎁 2025.06.23: Fine-tuning of reranker models is supported. Training scripts can be found here: [Reranker](https://github.com/modelscope/ms-swift/blob/main/examples/train/reranker/train_reranker.sh).
-- 🎁 2025.06.15: Support for GKD training on both pure text large models and multimodal models. Training scripts can be found here: [Pure Text](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/gkd), [Multimodal](https://github.com/modelscope/ms-swift/blob/main/examples/train/multimodal/rlhf/gkd).
+使用 Transformers 引擎，LoRA 权重动态叠加到基座模型，适合快速测试。
 
-<details><summary>More</summary>
-
-- 🎁 2025.06.11: Support for using Megatron parallelism techniques for RLHF training. The training script can be found [here](https://github.com/modelscope/ms-swift/tree/main/examples/megatron/rlhf).
-- 🎁 2025.05.29: Support sequence parallel in pretrain, sft, dpo and grpo, check script [here](https://github.com/modelscope/ms-swift/tree/main/examples/train/sequence_parallel).
-- 🎁 2025.05.11: GRPO now supports custom processing logic for reward models. See the GenRM example [here](./docs/source_en/Instruction/GRPO/DeveloperGuide/reward_model.md).
-- 🎁 2025.04.15: The ms-swift paper has been accepted by AAAI 2025. You can find the paper at [this link](https://ojs.aaai.org/index.php/AAAI/article/view/35383).
-- 🎁 2025.03.23: Multi-round GRPO is now supported for training multi-turn dialogue scenarios (e.g., agent tool calling). Please refer to the [doc](./docs/source_en/Instruction/GRPO/DeveloperGuide/multi_turn.md).
-- 🎁 2025.03.16: Support for Megatron's parallel training techniques is now available. Please see the [Megatron-SWIFT training documentation](https://swift.readthedocs.io/en/latest/Megatron-SWIFT/Quick-start.html).
-- 🎁 2025.03.15: Fine-tuning of embedding models for both pure text and multimodal models is supported. Please check the [training script](examples/train/embedding).
-- 🎁 2025.03.05: The hybrid mode for GRPO is supported, with a script for training a 72B model on 4 GPUs (4*80G) available [here](examples/train/grpo/internal/vllm_72b_4gpu.sh). Tensor parallelism with vllm is also supported, with the training script available [here](examples/train/grpo/internal).
-- 🎁 2025.02.21: The GRPO algorithm now supports LMDeploy, with the training script available [here](examples/train/grpo/internal/full_lmdeploy.sh). Additionally, the performance of the GRPO algorithm has been tested, achieving a training speed increase of up to 300% using various tricks. Please check the WanDB table [here](https://wandb.ai/tastelikefeet/grpo_perf_test?nw=nwuseryuzezyz).
-- 🎁 2025.02.21: The `swift sample` command is now supported. The reinforcement fine-tuning script can be found [here](docs/source_en/Instruction/Reinforced-Fine-tuning.md), and the large model API distillation sampling script is available [here](examples/sampler/distill/distill.sh).
-- 🔥 2025.02.12: Support for the GRPO (Group Relative Policy Optimization) training algorithm has been added. Documentation is available [here](docs/source_en/Instruction/GRPO/GetStarted/GRPO.md).
-- 🎁 2024.12.04: Major update to **ms-swift 3.0**. Please refer to the [release notes and changes](docs/source_en/Instruction/ReleaseNote3.0.md).
-- 🎉 2024.08.12: The ms-swift paper has been published on arXiv and can be read [here](https://arxiv.org/abs/2408.05517).
-- 🔥 2024.08.05: Support for using [evalscope](https://github.com/modelscope/evalscope/) as a backend for evaluating large models and multimodal models.
-- 🔥 2024.07.29: Support for using [vllm](https://github.com/vllm-project/vllm) and [lmdeploy](https://github.com/InternLM/lmdeploy) to accelerate inference for large models and multimodal models. When performing infer/deploy/eval, you can specify `--infer_backend vllm/lmdeploy`.
-- 🔥 2024.07.24: Support for human preference alignment training for multimodal large models, including DPO/ORPO/SimPO/CPO/KTO/RM/PPO.
-- 🔥 2024.02.01: Support for Agent training! The training algorithm is derived from [this paper](https://arxiv.org/pdf/2309.00986.pdf).
-</details>
-
-## 🛠️ Installation
-To install using pip:
-```shell
-pip install ms-swift -U
-
-# Using uv
-pip install uv
-uv pip install ms-swift -U --torch-backend=auto
-```
-
-To install from source:
-```shell
-# pip install git+https://github.com/modelscope/ms-swift.git
-
-git clone https://github.com/modelscope/ms-swift.git
-cd ms-swift
-# The main branch is for swift 4.x. To install swift 3.x, please run the following command:
-# git checkout release/3.12
-pip install -e .
-
-# Using uv
-uv pip install -e . --torch-backend=auto
-```
-
-Running Environment:
-
-|              | Range        | Recommended         | Notes                                     |
-|--------------|--------------|---------------------|-------------------------------------------|
-| python       | >=3.10        | 3.12                |                                           |
-| cuda         |              | cuda12.8/13.0    | No need to install if using CPU, NPU, MPS |
-| torch        | >=2.0        | 2.8.0/2.11.0         |                            |
-| transformers | >=4.33       | 4.57.6/5.8.1              |                          |
-| modelscope   | >=1.23       |                     |                                           |
-| datasets     | >=3.0,<4.8.5 | 3.6.0/4.8.4         |                    |
-| peft         | >=0.11,<0.20 |                     |                                           |
-| flash_attn   |              | 2.8.3/4.0.0b12 |                                           |
-| trl          | >=0.15,<1.0 | 0.29.1              | RLHF                                      |
-| deepspeed    | >=0.14       | 0.18.9              | Training                                  |
-| vllm         | >=0.5.1      | 0.11.0/0.20.2       | Inference/Deployment                      |
-| sglang       | >=0.4.6      |          | Inference/Deployment                      |
-| evalscope    | >=1.0       |                     | Evaluation                                |
-| gradio       |              | 5.32.1              | Web-UI/App                                |
-
-For more optional dependencies, you can refer to [here](https://github.com/modelscope/ms-swift/blob/main/requirements/install_all.sh).
-
-
-## 🚀 Quick Start
-
-10 minutes of self-cognition fine-tuning of Qwen3-4B-Instruct-2507 on a single 3090 GPU:
-
-### Command Line Interface (Recommended)
-
-```shell
-# 13GB
+```bash
 CUDA_VISIBLE_DEVICES=0 \
+swift infer \
+    --model /media/ddc/新加卷/hys/hysnew/Qwen/Qwen3.5-2B \
+    --adapters /media/ddc/新加卷/hys/qmy/ms-swift/output/v2-20260528-211924/checkpoint-31 \
+    --stream true \
+    --temperature 0 \
+    --max_new_tokens 2048
+```
+
+## 2. 合并 LoRA 权重
+
+将 LoRA 权重合并到基座模型，生成完整模型。
+
+```bash
+CUDA_VISIBLE_DEVICES=2 \
+swift export \
+    --model /media/ddc/新加卷/hys/hysnew/Qwen/Qwen3.5-2B \
+    --adapters /media/ddc/新加卷/hys/qmy/ms-swift/output/v2-20260528-211924/checkpoint-31 \
+    --merge_lora true \
+    --output_dir /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b
+```
+
+## 3. 修复合并后的模型配置
+
+合并后需要复制缺失的配置文件，并删除多余文件。
+
+### 3.1 复制缺失的文件
+
+```bash
+# 复制官方模型的配置文件
+cp /media/ddc/新加卷/hys/hysnew/Qwen/Qwen3.5-2B/config.json /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b/
+cp /media/ddc/新加卷/hys/hysnew/Qwen/Qwen3.5-2B/video_preprocessor_config.json /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b/
+
+# 复制 tokenizer 相关文件（可选，但推荐）
+cp /media/ddc/新加卷/hys/hysnew/Qwen3.5-2B-AWQ/tokenizer_config.json /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b/
+cp /media/ddc/新加卷/hys/hysnew/Qwen3.5-2B-AWQ/vocab.json /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b/
+cp /media/ddc/新加卷/hys/hysnew/Qwen3.5-2B-AWQ/merges.txt /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b/
+```
+
+### 3.2 删除多余的文件
+
+```bash
+rm /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b/processor_config.json
+rm /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b/args.json
+```
+
+## 4. 使用 VLLM 推理合并后的模型
+
+```bash
+CUDA_VISIBLE_DEVICES=0 \
+vllm serve /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b \
+    --api-key abc123 \
+    --served-model-name Qwen/Qwen3-VL-4B-AWQ \
+    --max-model-len 10240 \
+    --port 7890 \
+    --gpu-memory-utilization 0.15 \
+    --max-num-seqs 10 \
+    --enable-auto-tool-choice \
+    --tool-call-parser qwen3_xml
+```
+
+## 5. SFT 训练命令
+
+### 5.1 环境准备
+
+```bash
+conda activate swift
+```
+
+### 5.2 训练命令
+
+```bash
+CUDA_VISIBLE_DEVICES=1 \
 swift sft \
-    --model Qwen/Qwen3-4B-Instruct-2507 \
+    --model /media/ddc/新加卷/hys/hysnew/Qwen/Qwen3.5-2B \
     --tuner_type lora \
-    --dataset 'AI-ModelScope/alpaca-gpt4-data-zh#500' \
-              'AI-ModelScope/alpaca-gpt4-data-en#500' \
-              'swift/self-cognition#500' \
+    --dataset /media/ddc/新加卷/hys/qmy/agent/data/sft_train.jsonl \
     --torch_dtype bfloat16 \
-    --num_train_epochs 1 \
-    --per_device_train_batch_size 1 \
+    --num_train_epochs 10 \
+    --per_device_train_batch_size 2 \
     --per_device_eval_batch_size 1 \
     --learning_rate 1e-4 \
-    --lora_rank 8 \
-    --lora_alpha 32 \
+    --lora_rank 2 \
+    --lora_alpha 8 \
     --target_modules all-linear \
-    --gradient_accumulation_steps 16 \
+    --gradient_accumulation_steps 32 \
     --eval_steps 50 \
     --save_steps 50 \
     --save_total_limit 2 \
@@ -187,321 +147,360 @@ swift sft \
     --max_length 2048 \
     --output_dir output \
     --warmup_ratio 0.05 \
-    --dataloader_num_workers 4 \
+    --dataloader_num_workers 6 \
     --model_author swift \
     --model_name swift-robot
 ```
 
-Tips:
+## 6. 关键参数说明
 
-- If you want to train with a custom dataset, you can refer to [this guide](https://swift.readthedocs.io/en/latest/Customization/Custom-dataset.html) to organize your dataset format and specify `--dataset <dataset_path>`.
-- The `--model_author` and `--model_name` parameters are only effective when the dataset includes `swift/self-cognition`.
-- To train with a different model, simply modify `--model <model_id/model_path>`.
-- By default, **ModelScope** is used for downloading models and datasets. If you want to use HuggingFace, simply specify `--use_hf true`.
+### 6.1 数据加载参数
 
-After training is complete, use the following command to infer with the trained weights:
+| 参数 | 说明 |
+|------|------|
+| `--dataloader_num_workers 4` | 使用 4 个子进程并行加载数据 |
+| `--num_train_epochs 1` | 整个数据集遍历训练 1 轮 |
+| `--per_device_train_batch_size 1` | 每张 GPU 一次处理 1 条数据 |
 
-- Here, `--adapters` should be replaced with the last checkpoint folder generated during training. Since the adapters folder contains the training parameter file `args.json`, there is no need to specify `--model`, `--system` separately; Swift will automatically read these parameters. To disable this behavior, you can set `--load_args false`.
+### 6.2 LoRA 参数
 
-```shell
-# Using an interactive command line for inference.
-CUDA_VISIBLE_DEVICES=0 \
-swift infer \
-    --adapters output/vx-xxx/checkpoint-xxx \
-    --stream true \
-    --temperature 0 \
-    --max_new_tokens 2048
+| 参数 | 说明 |
+|------|------|
+| `--lora_rank 8` | LoRA 的秩（矩阵维度），越大拟合能力越强，但显存占用越多 |
+| `--lora_alpha 32` | 缩放系数，控制 LoRA 权重对原始模型的影响程度 |
+| `--target_modules all-linear` | 对所有线性层应用 LoRA，可减少到 `q_proj,v_proj` 或 `q_proj,k_proj,v_proj,o_proj` |
 
-# merge-lora and use vLLM for inference acceleration
-CUDA_VISIBLE_DEVICES=0 \
-swift infer \
-    --adapters output/vx-xxx/checkpoint-xxx \
-    --stream true \
-    --merge_lora true \
-    --infer_backend vllm \
-    --vllm_max_model_len 8192 \
-    --temperature 0 \
-    --max_new_tokens 2048
+### 6.3 多模态模型冻结参数
+
+```bash
+--freeze_llm true           # 冻结 LLM 部分
+--freeze_vit true           # 冻结 ViT 部分
+--freeze_aligner true       # 冻结对齐器
+--modules_to_save embed_tokens lm_head  # 即使使用 LoRA，也对这两个层进行全参数训练并保存权重
 ```
 
-Finally, use the following command to push the model to ModelScope:
+### 6.4 训练策略参数
 
-```shell
-CUDA_VISIBLE_DEVICES=0 \
-swift export \
-    --adapters output/vx-xxx/checkpoint-xxx \
-    --push_to_hub true \
-    --hub_model_id '<your-model-id>' \
-    --hub_token '<your-sdk-token>' \
-    --use_hf false
+| 参数 | 说明 |
+|------|------|
+| `--gradient_accumulation_steps 16` | 每 16 步才更新一次模型权重 |
+| `--torch_dtype bfloat16` | 加载模型时，把权重从 float32 转换为 bfloat16 |
+
+### 6.5 总 Step 数计算公式
+
+```
+总 step 数 = 数据量 ÷ (per_device_train_batch_size × gradient_accumulation_steps × GPU数) × epochs
 ```
 
+## 7. 训练指标说明
 
-### Web-UI
-The Web-UI is a **zero-threshold** training and deployment interface solution based on Gradio interface technology. For more details, you can check [here](https://swift.readthedocs.io/en/latest/GetStarted/Web-UI.html).
+| 指标 | 值 | 说明 |
+|------|-----|------|
+| loss | 0.3411 | 损失值，越低越好，0.34 说明模型在快速学习 |
+| grad_norm | 7.841 | 梯度范数，用于监控梯度爆炸/消失，正常范围 |
+| learning_rate | 5e-05 | 当前学习率，因为 warmup 还没结束，从 0 逐渐增加到 1e-4 |
+| token_acc | 0.915 | token 准确率 91.5%，模型预测正确的 token 比例 |
+| epoch | 0.03252 | 当前进度 3.25%，数据集还没遍历完一遍 |
+| global_step/max_steps | 1/31 | 第 1 步 / 共 31 步 |
+| elapsed_time | 41s | 已训练 41 秒 |
+| remaining_time | 20m 35s | 预计剩余 20 分 35 秒 |
+| memory(GiB) | 10.7 | 显存占用 10.7 GiB |
+| train_speed(s/it) | 41.16 | 每步耗时 41.16 秒 |
 
-```shell
-SWIFT_UI_LANG=en swift web-ui
+## 8. 行为识别评测脚本（eval_behavior.py）
+
+使用 vLLM API 模式进行行为识别评测。
+
+### 8.1 脚本功能
+
+- 通过 vLLM API 接口调用模型进行推理
+- 支持多模态输入（图片 + 文本）
+- 自动提取模型输出的 behavior_id 并与 ground truth 对比
+- 输出评测结果和错误样本分析
+
+### 8.2 使用方法
+
+```bash
+python eval_behavior.py \
+    --vllm_url http://localhost:7890 \
+    --model_name Qwen/Qwen3-VL-4B-AWQ \
+    --dataset /media/ddc/新加卷/hys/qmy/agent/data/sft_val.jsonl \
+    --debug
 ```
 
-![image.png](./docs/resources/web-ui-en.jpg)
+### 8.3 参数说明
 
-### Using Python
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--vllm_url` | http://localhost:7890 | vLLM 服务地址 |
+| `--model_name` | Qwen/Qwen3-VL-4B-AWQ | vLLM 模型名称 |
+| `--api_key` | abc123 | API 密钥 |
+| `--dataset` | （必填） | 评测数据集 jsonl 路径 |
+| `--max_new_tokens` | 256 | 最大生成 token 数 |
+| `--debug` | false | 打印前几条的原始输出 |
+| `--output` | 自动命名 | 预测结果保存路径 |
 
-ms-swift also supports training and inference using Python. Below is pseudocode for training and inference. For more details, you can refer to [here](https://github.com/modelscope/ms-swift/blob/main/examples/notebook/qwen2_5-self-cognition/self-cognition-sft.ipynb).
+### 8.4 数据集格式
 
-Training:
+数据集为 jsonl 格式，每行一个 JSON 对象：
 
-```python
-from peft import LoraConfig, get_peft_model
-from swift import get_model_processor, get_template, load_dataset, EncodePreprocessor
-from swift.trainers import Seq2SeqTrainer, Seq2SeqTrainingArguments
-# Retrieve the model and template, and add a trainable LoRA module
-model, tokenizer = get_model_processor(model_id_or_path, ...)
-template = get_template(tokenizer, ...)
-lora_config = LoraConfig(...)
-model = get_peft_model(model, lora_config)
-
-# Download and load the dataset, and encode the text into tokens
-train_dataset, val_dataset = load_dataset(dataset_id_or_path, ...)
-train_dataset = EncodePreprocessor(template=template)(train_dataset, num_proc=num_proc)
-val_dataset = EncodePreprocessor(template=template)(val_dataset, num_proc=num_proc)
-
-# Train the model
-training_args = Seq2SeqTrainingArguments(...)
-trainer = Seq2SeqTrainer(
-    model=model,
-    args=training_args,
-    template=template,
-    train_dataset=train_dataset,
-    eval_dataset=val_dataset,
-)
-trainer.train()
-```
-Inference:
-
-```python
-from swift import TransformersEngine, InferRequest, RequestConfig
-# Perform inference using the native Transformers engine
-engine = TransformersEngine(model_id_or_path, adapters=[lora_checkpoint])
-infer_request = InferRequest(messages=[{'role': 'user', 'content': 'who are you?'}])
-request_config = RequestConfig(max_tokens=max_new_tokens, temperature=temperature)
-
-resp_list = engine.infer([infer_request], request_config)
-print(f'response: {resp_list[0].choices[0].message.content}')
-```
-
-## ✨ Usage
-Here is a minimal example of training to deployment using ms-swift. For more details, you can check the [examples](https://github.com/modelscope/ms-swift/tree/main/examples).
-
-- If you want to use other models or datasets (including multimodal models and datasets), you only need to modify `--model` to specify the corresponding model's ID or path, and modify `--dataset` to specify the corresponding dataset's ID or path.
-- By default, ModelScope is used for downloading models and datasets. If you want to use HuggingFace, simply specify `--use_hf true`.
-
-|   Useful Links |
-| ------ |
-|   [🔥Command Line Parameters](https://swift.readthedocs.io/en/latest/Instruction/Command-line-parameters.html)   |
-|   [Megatron-SWIFT](https://swift.readthedocs.io/en/latest/Megatron-SWIFT/Quick-start.html)   |
-|   [GRPO](https://swift.readthedocs.io/en/latest/Instruction/GRPO/GetStarted/GRPO.html)   |
-|   [Supported Models and Datasets](https://swift.readthedocs.io/en/latest/Instruction/Supported-models-and-datasets.html)   |
-|   [Custom Models](https://swift.readthedocs.io/en/latest/Customization/Custom-model.html), [🔥Custom Datasets](https://swift.readthedocs.io/en/latest/Customization/Custom-dataset.html)   |
-|   [LLM Tutorial](https://github.com/modelscope/modelscope-classroom/tree/main/LLM-tutorial)   |
-
-### Training
-
-Supported Training Methods:
-
-| Method                                                       | Full-Parameter                                               | LoRA | QLoRA                                                        | Deepspeed                                                    | Multi-Machine                                                | Multimodal                                                   |
-| ------------------------------------------------------------ | ------------------------------------------------------------ | ---- | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| [Pre-training](https://github.com/modelscope/ms-swift/blob/main/examples/train/pretrain) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | ✅                                                            |
-| [Supervised Fine-Tuning](https://github.com/modelscope/ms-swift/blob/main/examples/train/lora_sft.sh) | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/full/train.sh) | ✅    | [✅](https://github.com/modelscope/ms-swift/tree/main/examples/train/qlora) | [✅](https://github.com/modelscope/ms-swift/tree/main/examples/train/multi-gpu/deepspeed) | [✅](https://github.com/modelscope/ms-swift/tree/main/examples/train/multi-node) | [✅](https://github.com/modelscope/ms-swift/tree/main/examples/train/multimodal) |
-| [GRPO](https://github.com/modelscope/ms-swift/blob/main/examples/train/grpo) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | ✅                                                            |
-| [GKD](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/gkd) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/multimodal/rlhf/gkd) |
-| [PPO](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/ppo) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | ❌                                                            |
-| [DPO](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/dpo) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/multimodal/rlhf/dpo) |
-| [KTO](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/kto.sh) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/multimodal/rlhf/kto.sh) |
-| [Reward Model](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/rm.sh) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | ✅                                                            |
-| [CPO](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/cpo.sh) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | ✅                                                            |
-| [SimPO](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/simpo.sh) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | ✅                                                            |
-| [ORPO](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/orpo.sh) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | ✅                                                            |
-| [Embedding](https://github.com/modelscope/ms-swift/blob/main/examples/train/embedding) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | ✅                                                            |
-| [Reranker](https://github.com/modelscope/ms-swift/tree/main/examples/train/reranker) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | ✅                                                            |
-| [Sequence Classification](https://github.com/modelscope/ms-swift/blob/main/examples/train/seq_cls) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | ✅                                                            |
-
-
-Pre-training:
-```shell
-# 8*A100
-NPROC_PER_NODE=8 \
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
-swift pt \
-    --model Qwen/Qwen3-4B-Base \
-    --dataset swift/chinese-c4 \
-    --streaming true \
-    --tuner_type full \
-    --deepspeed zero2 \
-    --output_dir output \
-    --max_steps 10000 \
-    ...
-```
-
-Fine-tuning:
-```shell
-CUDA_VISIBLE_DEVICES=0 swift sft \
-    --model Qwen/Qwen3-4B-Instruct-2507 \
-    --dataset AI-ModelScope/alpaca-gpt4-data-en \
-    --tuner_type lora \
-    --output_dir output \
-    ...
-```
-
-RLHF:
-```shell
-CUDA_VISIBLE_DEVICES=0 swift rlhf \
-    --rlhf_type dpo \
-    --model Qwen/Qwen3-4B-Instruct-2507 \
-    --dataset hjh0119/shareAI-Llama3-DPO-zh-en-emoji \
-    --tuner_type lora \
-    --output_dir output \
-    ...
-```
-
-
-### Megatron-SWIFT
-
-ms-swift supports using Megatron parallelism techniques to accelerate training, including large-scale cluster training and MoE model training. The following training methods are supported:
-
-| Method                 | Full-Parameter | LoRA | MoE  | Multimodal | FP8  |
-| ---------------------- | -------------- | ---- | ---- | ---------- | ---- |
-| Pre-training           | ✅              | ✅    | ✅    | ✅          | ✅    |
-| [Supervised Fine-Tuning](https://github.com/modelscope/ms-swift/tree/main/examples/megatron) | ✅              | ✅    | ✅    | ✅          | ✅    |
-| [GRPO](https://github.com/modelscope/ms-swift/tree/main/examples/megatron/grpo)                   | ✅              | ✅    | ✅    | ✅          | ✅    |
-| [GKD](https://github.com/modelscope/ms-swift/tree/main/examples/megatron/rlhf/gkd)                   | ✅              | ✅    | ✅    | ✅          | ✅    |
-| [DPO](https://github.com/modelscope/ms-swift/tree/main/examples/megatron/rlhf/dpo)                    | ✅              | ✅    | ✅    | ✅          | ✅    |
-| [KTO](https://github.com/modelscope/ms-swift/tree/main/examples/megatron/rlhf/kto)                    | ✅              | ✅    | ✅    | ✅          | ✅    |
-| [RM](https://github.com/modelscope/ms-swift/tree/main/examples/megatron/rlhf/rm)                     | ✅              | ✅    | ✅    | ✅          | ✅    |
-| [Embedding](https://github.com/modelscope/ms-swift/tree/main/examples/megatron/embedding) | ✅ | ✅| ✅ | ✅ | ✅ |
-| [Reranker](https://github.com/modelscope/ms-swift/tree/main/examples/megatron/reranker) | ✅ | ✅| ✅ | ✅ | ✅ |
-| [Sequence Classification](https://github.com/modelscope/ms-swift/tree/main/examples/megatron/seq_cls)    | ✅              | ✅    | ✅    | ✅          | ✅    |
-
-
-```shell
-NPROC_PER_NODE=2 CUDA_VISIBLE_DEVICES=0,1 megatron sft \
-    --model Qwen/Qwen3-4B-Instruct-2507 \
-    --save_safetensors true \
-    --dataset AI-ModelScope/alpaca-gpt4-data-zh \
-    --tuner_type lora \
-    --output_dir output \
-    ...
-```
-
-### Reinforcement Learning
-
-ms-swift supports a rich set of GRPO family algorithms:
-
-| Method                                                       | Full-Parameter | LoRA | Multimodal | Multi-Machine |
-| ------------------------------------------------------------ | -------------- | ---- | ---------- | ------------- |
-| [GRPO](https://swift.readthedocs.io/en/latest/Instruction/GRPO/GetStarted/GRPO.html) | ✅              | ✅    | ✅          | ✅             |
-| [DAPO](https://swift.readthedocs.io/en/latest/Instruction/GRPO/AdvancedResearch/DAPO.html) | ✅              | ✅    | ✅          | ✅             |
-| [GSPO](https://swift.readthedocs.io/en/latest/Instruction/GRPO/AdvancedResearch/GSPO.html) | ✅              | ✅    | ✅          | ✅             |
-| [SAPO](https://swift.readthedocs.io/en/latest/Instruction/GRPO/AdvancedResearch/SAPO.html) | ✅              | ✅    | ✅          | ✅             |
-| [CISPO](https://swift.readthedocs.io/en/latest/Instruction/GRPO/AdvancedResearch/CISPO.html) | ✅              | ✅    | ✅          | ✅             |
-| [CHORD](https://swift.readthedocs.io/en/latest/Instruction/GRPO/AdvancedResearch/CHORD.html) | ✅              | ✅    | ✅          | ✅             |
-| [RLOO](https://swift.readthedocs.io/en/latest/Instruction/GRPO/AdvancedResearch/RLOO.html) | ✅              | ✅    | ✅          | ✅             |
-| [Reinforce++](https://swift.readthedocs.io/en/latest/Instruction/GRPO/AdvancedResearch/REINFORCEPP.html) | ✅              | ✅    | ✅          | ✅             |
-
-```shell
-CUDA_VISIBLE_DEVICES=0,1,2,3 NPROC_PER_NODE=4 \
-swift rlhf \
-    --rlhf_type grpo \
-    --model Qwen/Qwen3-4B-Instruct-2507 \
-    --tuner_type lora \
-    --use_vllm true \
-    --vllm_mode colocate \
-    --dataset AI-MO/NuminaMath-TIR#10000 \
-    --output_dir output \
-    ...
-```
-
-
-### Inference
-```shell
-CUDA_VISIBLE_DEVICES=0 swift infer \
-    --model Qwen/Qwen3-4B-Instruct-2507 \
-    --stream true \
-    --infer_backend transformers \
-    --max_new_tokens 2048
-```
-
-### Interface Inference
-```shell
-CUDA_VISIBLE_DEVICES=0 swift app \
-    --model Qwen/Qwen3-4B-Instruct-2507 \
-    --stream true \
-    --infer_backend transformers \
-    --max_new_tokens 2048
-```
-
-### Deployment
-```shell
-CUDA_VISIBLE_DEVICES=0 swift deploy \
-    --model Qwen/Qwen3-4B-Instruct-2507 \
-    --infer_backend vllm
-```
-
-### Sampling
-```shell
-CUDA_VISIBLE_DEVICES=0 swift sample \
-    --model Qwen/Qwen3-4B-Instruct-2507 \
-    --sampler_engine transformers \
-    --num_return_sequences 5 \
-    --dataset AI-ModelScope/alpaca-gpt4-data-zh#5
-```
-
-### Evaluation
-```shell
-CUDA_VISIBLE_DEVICES=0 swift eval \
-    --model Qwen/Qwen3-4B-Instruct-2507 \
-    --infer_backend sglang \
-    --eval_backend OpenCompass \
-    --eval_dataset ARC_c
-```
-
-### Quantization
-```shell
-CUDA_VISIBLE_DEVICES=0 swift export \
-    --model Qwen/Qwen3-4B-Instruct-2507 \
-    --quant_method fp8 \
-    --dataset AI-ModelScope/alpaca-gpt4-data-zh \
-    --output_dir Qwen3-4B-Instruct-2507-FP8
-```
-
-### Push Model
-```shell
-swift export \
-    --model <model-path> \
-    --push_to_hub true \
-    --hub_model_id '<model-id>' \
-    --hub_token '<sdk-token>'
-```
-
-## 🏛 License
-
-This framework is licensed under the [Apache License (Version 2.0)](https://github.com/modelscope/ms-swift/blob/master/LICENSE). For models and datasets, please refer to the original resource page and follow the corresponding License.
-
-## 📎 Citation
-
-```bibtex
-@misc{zhao2024swiftascalablelightweightinfrastructure,
-      title={SWIFT:A Scalable lightWeight Infrastructure for Fine-Tuning},
-      author={Yuze Zhao and Jintao Huang and Jinghan Hu and Xingjun Wang and Yunlin Mao and Daoze Zhang and Zeyinzi Jiang and Zhikai Wu and Baole Ai and Ang Wang and Wenmeng Zhou and Yingda Chen},
-      year={2024},
-      eprint={2408.05517},
-      archivePrefix={arXiv},
-      primaryClass={cs.CL},
-      url={https://arxiv.org/abs/2408.05517},
+```json
+{
+    "query": "请识别视频中的行为",
+    "response": "{\"behavior_id\": \"1\", \"description\": \"...\"}",
+    "images": ["/path/to/image1.jpg"]
 }
 ```
 
-## Star History
+### 8.5 输出结果
 
-[![Star History Chart](https://api.star-history.com/svg?repos=modelscope/ms-swift&type=Date)](https://star-history.com/#modelscope/ms-swift&Date)
+评测结果保存为 JSON 文件，包含：
+
+```json
+{
+    "accuracy": 0.85,
+    "total": 100,
+    "correct": 85,
+    "unknown_pred": 5,
+    "per_class": {
+        "1": {"total": 30, "correct": 28},
+        "2": {"total": 25, "correct": 20}
+    },
+    "error_samples": [...]
+}
+```
+
+### 8.6 脚本代码
+
+```python
+"""
+行为识别模型评测脚本（vLLM API 模式）
+
+用法：
+    python eval_behavior.py \
+        --vllm_url http://localhost:7890 \
+        --model_name Qwen/Qwen3-VL-4B-AWQ \
+        --dataset /media/ddc/新加卷/hys/qmy/agent/data/sft_val.jsonl \
+        --debug
+"""
+import json
+import re
+import base64
+import argparse
+from collections import defaultdict
+from pathlib import Path
+
+import requests
+from tqdm import tqdm
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='行为识别评测')
+    parser.add_argument('--vllm_url', type=str, default='http://localhost:7890', help='vLLM 服务地址')
+    parser.add_argument('--model_name', type=str, default='Qwen/Qwen3-VL-4B-AWQ', help='vLLM 模型名称')
+    parser.add_argument('--api_key', type=str, default='abc123', help='API 密钥')
+    parser.add_argument('--dataset', type=str, required=True, help='评测数据集 jsonl 路径')
+    parser.add_argument('--max_new_tokens', type=int, default=256, help='最大生成 token 数')
+    parser.add_argument('--debug', action='store_true', help='打印前几条的原始输出')
+    parser.add_argument('--output', type=str, default=None, help='预测结果保存路径')
+    return parser.parse_args()
+
+
+def load_dataset(jsonl_path):
+    samples = []
+    with open(jsonl_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                samples.append(json.loads(line))
+    return samples
+
+
+def extract_behavior_id(text):
+    """从模型输出中提取 behavior_id"""
+    try:
+        match = re.search(r'\{[^{}]*\}', text, re.DOTALL)
+        if match:
+            data = json.loads(match.group())
+            bid = str(data.get('behavior_id', 'unknown'))
+            return bid, data
+    except (json.JSONDecodeError, KeyError):
+        pass
+
+    match = re.search(r'"behavior_id"\s*:\s*"?(\d+|unknown)"?', text)
+    if match:
+        return match.group(1), {}
+    return 'unknown', {}
+
+
+def encode_image(image_path):
+    """将图片编码为 base64"""
+    with open(image_path, 'rb') as f:
+        return base64.b64encode(f.read()).decode('utf-8')
+
+
+def inference_vllm(args, query, images):
+    """通过 vLLM API 进行推理"""
+    content = []
+
+    for img_path in images:
+        if img_path.startswith('http'):
+            content.append({
+                'type': 'image_url',
+                'image_url': {'url': img_path}
+            })
+        else:
+            img_base64 = encode_image(img_path)
+            content.append({
+                'type': 'image_url',
+                'image_url': {'url': f'data:image/jpeg;base64,{img_base64}'}
+            })
+
+    content.append({'type': 'text', 'text': query})
+
+    messages = [{'role': 'user', 'content': content}]
+
+    payload = {
+        'model': args.model_name,
+        'messages': messages,
+        'max_tokens': args.max_new_tokens,
+        'temperature': 0,
+    }
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {args.api_key}',
+    }
+
+    response = requests.post(
+        f'{args.vllm_url}/v1/chat/completions',
+        json=payload,
+        headers=headers,
+        timeout=60,
+    )
+    response.raise_for_status()
+
+    result = response.json()
+    return result['choices'][0]['message']['content']
+
+
+def main():
+    args = parse_args()
+
+    samples = load_dataset(args.dataset)
+    print(f'加载数据集: {args.dataset}，共 {len(samples)} 条样本')
+    print(f'vLLM 服务: {args.vllm_url}')
+    print(f'模型名称: {args.model_name}')
+
+    stats = {
+        'total': 0,
+        'correct': 0,
+        'unknown_pred': 0,
+        'per_class': defaultdict(lambda: {'total': 0, 'correct': 0}),
+        'errors': [],
+    }
+
+    for idx, sample in enumerate(tqdm(samples, desc='评测中')):
+        query = sample['query']
+        gt_response = sample['response']
+        images = sample.get('images', [])
+
+        gt_id, _ = extract_behavior_id(gt_response)
+        if gt_id == 'unknown':
+            continue
+
+        try:
+            pred_text = inference_vllm(args, query, images)
+        except Exception as e:
+            stats['errors'].append({'sample_idx': idx, 'error': str(e)})
+            continue
+
+        if args.debug and stats['total'] < 3:
+            print(f'\n--- 样本 {stats["total"]+1} ---')
+            print(f'GT ID: {gt_id}')
+            print(f'图片: {images[0] if images else "N/A"}')
+            print(f'模型输出: {pred_text[:500]}')
+
+        pred_id, _ = extract_behavior_id(pred_text)
+        stats['total'] += 1
+        stats['per_class'][gt_id]['total'] += 1
+
+        if pred_id == 'unknown':
+            stats['unknown_pred'] += 1
+
+        if pred_id == gt_id:
+            stats['correct'] += 1
+            stats['per_class'][gt_id]['correct'] += 1
+        else:
+            stats['errors'].append({
+                'gt_id': gt_id,
+                'pred_id': pred_id,
+                'pred_text': pred_text[:200],
+                'image': images[0] if images else None,
+            })
+
+    print('\n' + '=' * 60)
+    print('评测结果')
+    print('=' * 60)
+
+    total = stats['total']
+    if total == 0:
+        print('无有效样本')
+        return
+
+    accuracy = stats['correct'] / total
+    print(f'总样本数: {len(samples)}')
+    print(f'有效样本数: {total}')
+    print(f'正确数: {stats["correct"]}')
+    print(f'准确率: {accuracy:.4f} ({stats["correct"]}/{total})')
+    print(f'未识别数: {stats["unknown_pred"]}')
+    print(f'推理错误数: {len(stats["errors"])}')
+
+    print(f'\n{"类别":<15} {"正确":<8} {"总数":<8} {"准确率":<10}')
+    print('-' * 45)
+    for cls_id in sorted(stats['per_class'].keys()):
+        cls = stats['per_class'][cls_id]
+        cls_acc = cls['correct'] / cls['total'] if cls['total'] > 0 else 0
+        print(f'{cls_id:<15} {cls["correct"]:<8} {cls["total"]:<8} {cls_acc:.4f}')
+
+    if stats['errors']:
+        print(f'\n前 5 个错误样本:')
+        for i, err in enumerate(stats['errors'][:5]):
+            print(f'  [{i+1}] GT: {err.get("gt_id", "?")} | Pred: {err.get("pred_id", "?")} | Image: {err.get("image", "N/A")}')
+
+    output_path = args.output or str(Path(args.dataset).with_suffix('.eval_result.json'))
+    result = {
+        'accuracy': accuracy,
+        'total': total,
+        'correct': stats['correct'],
+        'unknown_pred': stats['unknown_pred'],
+        'per_class': {k: dict(v) for k, v in stats['per_class'].items()},
+        'error_samples': stats['errors'][:20],
+    }
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
+    print(f'\n结果已保存到: {output_path}')
+
+
+if __name__ == '__main__':
+    main()
+```
+
+---
+
+## License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+## Citation
+
+If you find this project useful, please cite:
+
+```bibtex
+@article{swift2024,
+  title={SWIFT: Scalable lightWeight Infrastructure for Fine-Tuning},
+  author={ModelScope Team},
+  journal={arXiv preprint arXiv:2408.05517},
+  year={2024}
+}
+```
