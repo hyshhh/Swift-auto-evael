@@ -1,57 +1,59 @@
-# Swift-auto-evael: Qwen3.5 模型微调与部署解决方案
+<div align="center">
 
-## 项目背景
+# 🚀 Swift-auto-evael
 
-本项目旨在解决 **ms-swift 框架合并 LoRA 权重后与 vLLM 推理引擎的兼容性问题**。
+### Qwen3.5 模型微调与部署解决方案
+
+解决 ms-swift 框架合并 LoRA 权重后与 vLLM 推理引擎的兼容性问题
+
+[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
+[![CUDA](https://img.shields.io/badge/CUDA-12.0+-76b900.svg)](https://developer.nvidia.com/cuda-toolkit)
+[![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
+
+</div>
+
+---
+
+## 📋 目录
+
+- [项目背景](#-项目背景)
+- [快速开始](#-快速开始)
+- [完整流程](#-完整流程)
+- [环境要求](#-环境要求)
+- [常见问题](#-常见问题)
+- [许可证](#-许可证)
+
+---
+
+## 🎯 项目背景
 
 ### 问题描述
 
 在使用 ms-swift 框架对 Qwen3.5 模型进行 LoRA 微调后，通过 `swift export --merge_lora` 命令合并权重时，会遇到以下问题：
 
-1. **配置文件缺失**：合并后的模型缺少 `video_preprocessor_config.json` 等关键配置文件
-2. **vLLM 不兼容**：vLLM 对 Qwen3.5 模型架构的支持不完整，导致推理失败
-3. **参数加载异常**：部分层的权重参数无法正确加载
+| 问题 | 影响 |
+|------|------|
+| 🔴 **配置文件缺失** | 合并后的模型缺少 `video_preprocessor_config.json` 等关键配置文件 |
+| 🔴 **vLLM 不兼容** | vLLM 对 Qwen3.5 模型架构的支持不完整，导致推理失败 |
+| 🔴 **参数加载异常** | 部分层的权重参数无法正确加载 |
 
 ### 解决方案
 
 本项目提供了一套完整的解决方案：
 
-1. **正确的合并流程**：使用 `swift export` 命令合并 LoRA 权重
-2. **配置文件修复**：从官方模型复制缺失的配置文件
-3. **vLLM 推理配置**：正确配置 vLLM 服务参数
-4. **评测脚本**：提供基于 vLLM API 的行为识别评测脚本
+| 步骤 | 说明 | 命令 |
+|------|------|------|
+| ✅ **合并 LoRA** | 使用 `swift export` 合并权重 | `swift export --merge_lora true` |
+| ✅ **修复配置** | 复制缺失的配置文件 | `cp config.json ...` |
+| ✅ **VLLM 推理** | 正确配置 vLLM 服务参数 | `vllm serve ...` |
+| ✅ **评测脚本** | 基于 vLLM API 的行为识别评测 | `python eval_behavior.py` |
 
 ---
 
-## 目录
+## 🚀 快速开始
 
-- [环境要求](#环境要求)
-- [基础推理](#1-基础推理lora-动态叠加)
-- [合并 LoRA 权重](#2-合并-lora-权重)
-- [修复合并后的模型配置](#3-修复合并后的模型配置)
-- [使用 VLLM 推理](#4-使用-vllm-推理合并后的模型)
-- [SFT 训练命令](#5-sft-训练命令)
-- [关键参数说明](#6-关键参数说明)
-- [训练指标说明](#7-训练指标说明)
-- [行为识别评测脚本](#8-行为识别评测脚本eval_behaviorpy)
-
----
-
-## 环境要求
-
-| 组件 | 版本要求 | 推荐版本 |
-|------|----------|----------|
-| Python | >=3.10 | 3.12 |
-| CUDA | >=12.0 | 12.4/12.8 |
-| PyTorch | >=2.0 | 2.8.0 |
-| transformers | >=4.33,<5.6.0 | 4.57.6 |
-| vllm | >=0.5.1 | 0.19.0 |
-
----
-
-## 1. 基础推理（LoRA 动态叠加）
-
-使用 Transformers 引擎，LoRA 权重动态叠加到基座模型，适合快速测试。
+### 1. 基础推理（LoRA 动态叠加）
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 \
@@ -63,9 +65,7 @@ swift infer \
     --max_new_tokens 2048
 ```
 
-## 2. 合并 LoRA 权重
-
-将 LoRA 权重合并到基座模型，生成完整模型。
+### 2. 合并 LoRA 权重
 
 ```bash
 CUDA_VISIBLE_DEVICES=2 \
@@ -76,11 +76,7 @@ swift export \
     --output_dir /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b
 ```
 
-## 3. 修复合并后的模型配置
-
-合并后需要复制缺失的配置文件，并删除多余文件。
-
-### 3.1 复制缺失的文件
+### 3. 修复合并后的模型配置
 
 ```bash
 # 复制官方模型的配置文件
@@ -91,16 +87,13 @@ cp /media/ddc/新加卷/hys/hysnew/Qwen/Qwen3.5-2B/video_preprocessor_config.jso
 cp /media/ddc/新加卷/hys/hysnew/Qwen3.5-2B-AWQ/tokenizer_config.json /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b/
 cp /media/ddc/新加卷/hys/hysnew/Qwen3.5-2B-AWQ/vocab.json /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b/
 cp /media/ddc/新加卷/hys/hysnew/Qwen3.5-2B-AWQ/merges.txt /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b/
-```
 
-### 3.2 删除多余的文件
-
-```bash
+# 删除多余的文件
 rm /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b/processor_config.json
 rm /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b/args.json
 ```
 
-## 4. 使用 VLLM 推理合并后的模型
+### 4. 使用 VLLM 推理
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 \
@@ -115,17 +108,25 @@ vllm serve /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b \
     --tool-call-parser qwen3_xml
 ```
 
-## 5. SFT 训练命令
+### 5. 评测
 
-### 5.1 环境准备
+```bash
+python eval_behavior.py \
+    --vllm_url http://localhost:7890 \
+    --model_name Qwen/Qwen3-VL-4B-AWQ \
+    --dataset /media/ddc/新加卷/hys/qmy/agent/data/sft_val.jsonl \
+    --debug
+```
+
+---
+
+## 📚 完整流程
+
+### SFT 训练
 
 ```bash
 conda activate swift
-```
 
-### 5.2 训练命令
-
-```bash
 CUDA_VISIBLE_DEVICES=1 \
 swift sft \
     --model /media/ddc/新加卷/hys/hysnew/Qwen/Qwen3.5-2B \
@@ -152,97 +153,94 @@ swift sft \
     --model_name swift-robot
 ```
 
-## 6. 关键参数说明
-
-### 6.1 数据加载参数
-
-| 参数 | 说明 |
-|------|------|
-| `--dataloader_num_workers 4` | 使用 4 个子进程并行加载数据 |
-| `--num_train_epochs 1` | 整个数据集遍历训练 1 轮 |
-| `--per_device_train_batch_size 1` | 每张 GPU 一次处理 1 条数据 |
-
-### 6.2 LoRA 参数
-
-| 参数 | 说明 |
-|------|------|
-| `--lora_rank 8` | LoRA 的秩（矩阵维度），越大拟合能力越强，但显存占用越多 |
-| `--lora_alpha 32` | 缩放系数，控制 LoRA 权重对原始模型的影响程度 |
-| `--target_modules all-linear` | 对所有线性层应用 LoRA，可减少到 `q_proj,v_proj` 或 `q_proj,k_proj,v_proj,o_proj` |
-
-### 6.3 多模态模型冻结参数
+### AWQ 量化
 
 ```bash
---freeze_llm true           # 冻结 LLM 部分
---freeze_vit true           # 冻结 ViT 部分
---freeze_aligner true       # 冻结对齐器
---modules_to_save embed_tokens lm_head  # 即使使用 LoRA，也对这两个层进行全参数训练并保存权重
+# 激活环境
+conda activate llmpress
+
+# 安装依赖
+pip install llmcompressor
+pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu124
+
+# 运行量化
+cd /media/ddc/新加卷/hys/hysnew3/Swift-auto-evael/hys_quantify
+
+CUDA_VISIBLE_DEVICES=0 python quantize_awq.py \
+    --model /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b \
+    --output /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b-awq \
+    --bits 4 \
+    --group_size 128 \
+    --dataset alpaca \
+    --copy_config \
+    --official_model /media/ddc/新加卷/hys/hysnew/Qwen/Qwen3.5-2B
 ```
 
-### 6.4 训练策略参数
+---
 
-| 参数 | 说明 |
-|------|------|
-| `--gradient_accumulation_steps 16` | 每 16 步才更新一次模型权重 |
-| `--torch_dtype bfloat16` | 加载模型时，把权重从 float32 转换为 bfloat16 |
+## 🛠️ 环境要求
 
-### 6.5 总 Step 数计算公式
+| 组件 | 版本要求 | 推荐版本 | 说明 |
+|------|----------|----------|------|
+| Python | >=3.10 | 3.12 | 运行环境 |
+| CUDA | >=12.0 | 12.4/12.8 | GPU 支持 |
+| PyTorch | >=2.0 | 2.8.0 | 深度学习框架 |
+| transformers | >=4.33,<5.6.0 | 4.57.6 | 模型加载 |
+| vllm | >=0.5.1 | 0.19.0 | 推理引擎 |
 
-```
-总 step 数 = 数据量 ÷ (per_device_train_batch_size × gradient_accumulation_steps × GPU数) × epochs
-```
-
-## 7. 训练指标说明
-
-| 指标 | 值 | 说明 |
-|------|-----|------|
-| loss | 0.3411 | 损失值，越低越好，0.34 说明模型在快速学习 |
-| grad_norm | 7.841 | 梯度范数，用于监控梯度爆炸/消失，正常范围 |
-| learning_rate | 5e-05 | 当前学习率，因为 warmup 还没结束，从 0 逐渐增加到 1e-4 |
-| token_acc | 0.915 | token 准确率 91.5%，模型预测正确的 token 比例 |
-| epoch | 0.03252 | 当前进度 3.25%，数据集还没遍历完一遍 |
-| global_step/max_steps | 1/31 | 第 1 步 / 共 31 步 |
-| elapsed_time | 41s | 已训练 41 秒 |
-| remaining_time | 20m 35s | 预计剩余 20 分 35 秒 |
-| memory(GiB) | 10.7 | 显存占用 10.7 GiB |
-| train_speed(s/it) | 41.16 | 每步耗时 41.16 秒 |
-
-## 8. 行为识别评测脚本（eval_behavior.py）
-
-使用 vLLM API 模式进行行为识别评测。
-
-### 8.1 脚本功能
-
-- 通过 vLLM API 接口调用模型进行推理
-- 支持多模态输入（图片 + 文本）
-- 自动提取模型输出的 behavior_id 并与 ground truth 对比
-- 输出评测结果和错误样本分析
-
-### 8.2 使用方法
+### 安装依赖
 
 ```bash
-python eval_behavior.py \
-    --vllm_url http://localhost:7890 \
-    --model_name Qwen/Qwen3-VL-4B-AWQ \
-    --dataset /media/ddc/新加卷/hys/qmy/agent/data/sft_val.jsonl \
-    --debug
+# 基础环境
+conda create -n swift python=3.12 -y
+conda activate swift
+
+# 安装 PyTorch（根据你的 CUDA 版本）
+pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu124
+
+# 安装 ms-swift
+pip install ms-swift -U
+
+# 安装 vLLM
+pip install vllm -U
 ```
 
-### 8.3 参数说明
+---
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `--vllm_url` | http://localhost:7890 | vLLM 服务地址 |
-| `--model_name` | Qwen/Qwen3-VL-4B-AWQ | vLLM 模型名称 |
-| `--api_key` | abc123 | API 密钥 |
-| `--dataset` | （必填） | 评测数据集 jsonl 路径 |
-| `--max_new_tokens` | 256 | 最大生成 token 数 |
-| `--debug` | false | 打印前几条的原始输出 |
-| `--output` | 自动命名 | 预测结果保存路径 |
+## ❓ 常见问题
 
-### 8.4 数据集格式
+### Q: 合并后模型无法推理？
 
-数据集为 jsonl 格式，每行一个 JSON 对象：
+**A:** 需要复制配置文件：
+
+```bash
+cp /media/ddc/新加卷/hys/hysnew/Qwen/Qwen3.5-2B/config.json /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b/
+cp /media/ddc/新加卷/hys/hysnew/Qwen/Qwen3.5-2B/video_preprocessor_config.json /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b/
+```
+
+### Q: vLLM 报错不支持 Qwen3.5？
+
+**A:** 确保使用最新版本的 vLLM：
+
+```bash
+pip install vllm --upgrade
+```
+
+### Q: 显存不足？
+
+**A:** 尝试使用量化或减小 batch size：
+
+```bash
+# 使用 4-bit 量化
+--quantization awq
+
+# 减小 batch size
+--per_device_train_batch_size 1
+```
+
+### Q: 如何使用自定义数据集？
+
+**A:** 准备 JSONL 格式的数据集：
 
 ```json
 {
@@ -252,247 +250,48 @@ python eval_behavior.py \
 }
 ```
 
-### 8.5 输出结果
+---
 
-评测结果保存为 JSON 文件，包含：
+## 📊 训练指标说明
 
-```json
-{
-    "accuracy": 0.85,
-    "total": 100,
-    "correct": 85,
-    "unknown_pred": 5,
-    "per_class": {
-        "1": {"total": 30, "correct": 28},
-        "2": {"total": 25, "correct": 20}
-    },
-    "error_samples": [...]
-}
+| 指标 | 说明 | 正常范围 |
+|------|------|----------|
+| `loss` | 损失值，越低越好 | 0.1 - 1.0 |
+| `grad_norm` | 梯度范数，监控梯度爆炸/消失 | 0.1 - 10.0 |
+| `learning_rate` | 当前学习率 | 1e-5 - 1e-4 |
+| `token_acc` | token 准确率 | 0.8 - 1.0 |
+| `memory(GiB)` | 显存占用 | 根据 GPU 而定 |
+
+### 总 Step 数计算公式
+
 ```
-
-### 8.6 脚本代码
-
-```python
-"""
-行为识别模型评测脚本（vLLM API 模式）
-
-用法：
-    python eval_behavior.py \
-        --vllm_url http://localhost:7890 \
-        --model_name Qwen/Qwen3-VL-4B-AWQ \
-        --dataset /media/ddc/新加卷/hys/qmy/agent/data/sft_val.jsonl \
-        --debug
-"""
-import json
-import re
-import base64
-import argparse
-from collections import defaultdict
-from pathlib import Path
-
-import requests
-from tqdm import tqdm
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(description='行为识别评测')
-    parser.add_argument('--vllm_url', type=str, default='http://localhost:7890', help='vLLM 服务地址')
-    parser.add_argument('--model_name', type=str, default='Qwen/Qwen3-VL-4B-AWQ', help='vLLM 模型名称')
-    parser.add_argument('--api_key', type=str, default='abc123', help='API 密钥')
-    parser.add_argument('--dataset', type=str, required=True, help='评测数据集 jsonl 路径')
-    parser.add_argument('--max_new_tokens', type=int, default=256, help='最大生成 token 数')
-    parser.add_argument('--debug', action='store_true', help='打印前几条的原始输出')
-    parser.add_argument('--output', type=str, default=None, help='预测结果保存路径')
-    return parser.parse_args()
-
-
-def load_dataset(jsonl_path):
-    samples = []
-    with open(jsonl_path, 'r', encoding='utf-8') as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                samples.append(json.loads(line))
-    return samples
-
-
-def extract_behavior_id(text):
-    """从模型输出中提取 behavior_id"""
-    try:
-        match = re.search(r'\{[^{}]*\}', text, re.DOTALL)
-        if match:
-            data = json.loads(match.group())
-            bid = str(data.get('behavior_id', 'unknown'))
-            return bid, data
-    except (json.JSONDecodeError, KeyError):
-        pass
-
-    match = re.search(r'"behavior_id"\s*:\s*"?(\d+|unknown)"?', text)
-    if match:
-        return match.group(1), {}
-    return 'unknown', {}
-
-
-def encode_image(image_path):
-    """将图片编码为 base64"""
-    with open(image_path, 'rb') as f:
-        return base64.b64encode(f.read()).decode('utf-8')
-
-
-def inference_vllm(args, query, images):
-    """通过 vLLM API 进行推理"""
-    content = []
-
-    for img_path in images:
-        if img_path.startswith('http'):
-            content.append({
-                'type': 'image_url',
-                'image_url': {'url': img_path}
-            })
-        else:
-            img_base64 = encode_image(img_path)
-            content.append({
-                'type': 'image_url',
-                'image_url': {'url': f'data:image/jpeg;base64,{img_base64}'}
-            })
-
-    content.append({'type': 'text', 'text': query})
-
-    messages = [{'role': 'user', 'content': content}]
-
-    payload = {
-        'model': args.model_name,
-        'messages': messages,
-        'max_tokens': args.max_new_tokens,
-        'temperature': 0,
-    }
-
-    headers = {
-        'Content-Type': 'application/json',
-        'Authorization': f'Bearer {args.api_key}',
-    }
-
-    response = requests.post(
-        f'{args.vllm_url}/v1/chat/completions',
-        json=payload,
-        headers=headers,
-        timeout=60,
-    )
-    response.raise_for_status()
-
-    result = response.json()
-    return result['choices'][0]['message']['content']
-
-
-def main():
-    args = parse_args()
-
-    samples = load_dataset(args.dataset)
-    print(f'加载数据集: {args.dataset}，共 {len(samples)} 条样本')
-    print(f'vLLM 服务: {args.vllm_url}')
-    print(f'模型名称: {args.model_name}')
-
-    stats = {
-        'total': 0,
-        'correct': 0,
-        'unknown_pred': 0,
-        'per_class': defaultdict(lambda: {'total': 0, 'correct': 0}),
-        'errors': [],
-    }
-
-    for idx, sample in enumerate(tqdm(samples, desc='评测中')):
-        query = sample['query']
-        gt_response = sample['response']
-        images = sample.get('images', [])
-
-        gt_id, _ = extract_behavior_id(gt_response)
-        if gt_id == 'unknown':
-            continue
-
-        try:
-            pred_text = inference_vllm(args, query, images)
-        except Exception as e:
-            stats['errors'].append({'sample_idx': idx, 'error': str(e)})
-            continue
-
-        if args.debug and stats['total'] < 3:
-            print(f'\n--- 样本 {stats["total"]+1} ---')
-            print(f'GT ID: {gt_id}')
-            print(f'图片: {images[0] if images else "N/A"}')
-            print(f'模型输出: {pred_text[:500]}')
-
-        pred_id, _ = extract_behavior_id(pred_text)
-        stats['total'] += 1
-        stats['per_class'][gt_id]['total'] += 1
-
-        if pred_id == 'unknown':
-            stats['unknown_pred'] += 1
-
-        if pred_id == gt_id:
-            stats['correct'] += 1
-            stats['per_class'][gt_id]['correct'] += 1
-        else:
-            stats['errors'].append({
-                'gt_id': gt_id,
-                'pred_id': pred_id,
-                'pred_text': pred_text[:200],
-                'image': images[0] if images else None,
-            })
-
-    print('\n' + '=' * 60)
-    print('评测结果')
-    print('=' * 60)
-
-    total = stats['total']
-    if total == 0:
-        print('无有效样本')
-        return
-
-    accuracy = stats['correct'] / total
-    print(f'总样本数: {len(samples)}')
-    print(f'有效样本数: {total}')
-    print(f'正确数: {stats["correct"]}')
-    print(f'准确率: {accuracy:.4f} ({stats["correct"]}/{total})')
-    print(f'未识别数: {stats["unknown_pred"]}')
-    print(f'推理错误数: {len(stats["errors"])}')
-
-    print(f'\n{"类别":<15} {"正确":<8} {"总数":<8} {"准确率":<10}')
-    print('-' * 45)
-    for cls_id in sorted(stats['per_class'].keys()):
-        cls = stats['per_class'][cls_id]
-        cls_acc = cls['correct'] / cls['total'] if cls['total'] > 0 else 0
-        print(f'{cls_id:<15} {cls["correct"]:<8} {cls["total"]:<8} {cls_acc:.4f}')
-
-    if stats['errors']:
-        print(f'\n前 5 个错误样本:')
-        for i, err in enumerate(stats['errors'][:5]):
-            print(f'  [{i+1}] GT: {err.get("gt_id", "?")} | Pred: {err.get("pred_id", "?")} | Image: {err.get("image", "N/A")}')
-
-    output_path = args.output or str(Path(args.dataset).with_suffix('.eval_result.json'))
-    result = {
-        'accuracy': accuracy,
-        'total': total,
-        'correct': stats['correct'],
-        'unknown_pred': stats['unknown_pred'],
-        'per_class': {k: dict(v) for k, v in stats['per_class'].items()},
-        'error_samples': stats['errors'][:20],
-    }
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(result, f, ensure_ascii=False, indent=2)
-    print(f'\n结果已保存到: {output_path}')
-
-
-if __name__ == '__main__':
-    main()
+总 step 数 = 数据量 ÷ (per_device_train_batch_size × gradient_accumulation_steps × GPU数) × epochs
 ```
 
 ---
 
-## License
+## 📁 项目结构
+
+```
+Swift-auto-evael/
+├── README.md                    # 项目说明文档
+├── readme-hys.md                # 详细操作笔记
+├── eval_behavior.py             # 行为识别评测脚本
+└── hys_quantify/                # AWQ 量化脚本
+    ├── quantize_awq.py          # 量化主脚本
+    ├── run_quantize.sh          # 运行脚本
+    └── README.md                # 量化说明文档
+```
+
+---
+
+## 📄 许可证
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
-## Citation
+---
+
+## 📚 引用
 
 If you find this project useful, please cite:
 
@@ -504,3 +303,11 @@ If you find this project useful, please cite:
   year={2024}
 }
 ```
+
+---
+
+<div align="center">
+
+**⭐ 如果这个项目对你有帮助，请给个 Star ⭐**
+
+</div>
