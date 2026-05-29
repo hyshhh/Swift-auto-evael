@@ -1,5 +1,5 @@
 """
-AWQ 量化脚本 - 将 LoRA 微调后的模型量化为 AWQ 格式
+AWQ 量化脚本 - 使用 llm-compressor 进行 AWQ 量化
 
 用法：
     python quantize_awq.py \
@@ -15,15 +15,14 @@ import argparse
 from pathlib import Path
 
 import torch
-from awq import AutoAWQForCausalLM
 from transformers import AutoTokenizer
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='AWQ 量化脚本')
+    parser = argparse.ArgumentParser(description='AWQ 量化脚本（使用 llm-compressor）')
     parser.add_argument('--model', type=str, required=True, help='合并后的模型路径')
     parser.add_argument('--output', type=str, required=True, help='量化后模型保存路径')
-    parser.add_argument('--bits', type=int, default=4, choices=[4], help='量化位数（默认 4-bit）')
+    parser.add_argument('--bits', type=int, default=4, choices=[2, 3, 4], help='量化位数（默认 4-bit）')
     parser.add_argument('--group_size', type=int, default=128, help='量化分组大小')
     parser.add_argument('--dataset', type=str, default=None, help='校准数据集路径（可选）')
     parser.add_argument('--copy_config', action='store_true', help='复制官方模型配置文件')
@@ -67,7 +66,7 @@ def copy_config_files(official_model, output_path):
 def quantize_model(args):
     """执行 AWQ 量化"""
     print('=' * 60)
-    print('AWQ 量化脚本')
+    print('AWQ 量化脚本（llm-compressor）')
     print('=' * 60)
 
     # 检查模型路径
@@ -84,58 +83,46 @@ def quantize_model(args):
     print(f'量化位数: {args.bits}-bit')
     print(f'分组大小: {args.group_size}')
 
-    # 加载模型
-    print('\n步骤 1: 加载模型...')
-    model = AutoAWQForCausalLM.from_pretrained(
-        str(model_path),
-        torch_dtype=torch.float16,
-        device_map='auto',
-        trust_remote_code=True,
-    )
+    # 使用 llm-compressor 进行量化
+    print('\n步骤 1: 开始 AWQ 量化...')
 
-    # 加载分词器
-    print('步骤 2: 加载分词器...')
-    tokenizer = AutoTokenizer.from_pretrained(
-        str(model_path),
-        trust_remote_code=True,
-        use_fast=True,
-    )
+    # 构建量化命令
+    cmd = f"""
+from llmcompressor.modifiers.quantization import AWQModifier
+from llmcompressor.transformers import oneshot
 
-    # 量化配置
-    quant_config = {
-        'zero_point': True,
-        'q_group_size': args.group_size,
-        'w_bit': args.bits,
-        'version': 'GEMM',
-    }
+awq_modifier = AWQModifier(
+    targets="Linear",
+    scheme="W{args.bits}A8",
+    group_size={args.group_size},
+)
 
-    print(f'\n步骤 3: 开始量化...')
-    print(f'量化配置: {quant_config}')
+oneshot(
+    model="{model_path}",
+    dataset="{args.dataset or 'alpaca'}",
+    recipe=[awq_modifier],
+    output_dir="{output_path}",
+    max_seq_length=512,
+    num_calibration_samples=128,
+)
+"""
 
     # 执行量化
-    model.quantize(
-        tokenizer,
-        quant_config=quant_config,
-        n_parallel_workers=4,
-    )
-
-    # 保存量化后的模型
-    print(f'\n步骤 4: 保存量化模型...')
-    model.save_quantized(str(output_path))
-    tokenizer.save_pretrained(str(output_path))
+    print('执行量化命令...')
+    exec(cmd)
 
     # 复制配置文件
     if args.copy_config and args.official_model:
-        print('\n步骤 5: 复制配置文件...')
+        print('\n步骤 2: 复制配置文件...')
         copy_config_files(args.official_model, output_path)
 
     # 保存量化信息
     quant_info = {
         'model_path': str(model_path),
         'output_path': str(output_path),
+        'quant_method': 'awq',
         'quant_bits': args.bits,
         'group_size': args.group_size,
-        'quant_config': quant_config,
     }
     info_path = output_path / 'quant_info.json'
     with open(info_path, 'w', encoding='utf-8') as f:
