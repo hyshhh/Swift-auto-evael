@@ -160,31 +160,29 @@ uv pip install -e . --torch-backend=auto
 ```shell
 # 13GB
 CUDA_VISIBLE_DEVICES=0 \
-swift sft \
-    --model Qwen/Qwen3-4B-Instruct-2507 \
-    --tuner_type lora \
-    --dataset 'AI-ModelScope/alpaca-gpt4-data-zh#500' \
-              'AI-ModelScope/alpaca-gpt4-data-en#500' \
-              'swift/self-cognition#500' \
-    --torch_dtype bfloat16 \
-    --num_train_epochs 1 \
-    --per_device_train_batch_size 1 \
-    --per_device_eval_batch_size 1 \
-    --learning_rate 1e-4 \
-    --lora_rank 8 \
-    --lora_alpha 32 \
-    --target_modules all-linear \
-    --gradient_accumulation_steps 16 \
-    --eval_steps 50 \
-    --save_steps 50 \
-    --save_total_limit 2 \
-    --logging_steps 5 \
-    --max_length 2048 \
-    --output_dir output \
-    --warmup_ratio 0.05 \
-    --dataloader_num_workers 4 \
-    --model_author swift \
-    --model_name swift-robot
+swift sft \                         # 使用 swift 进行监督微调 (SFT)
+    --model Qwen/Qwen3-4B-Instruct-2507 \  # 基座模型：Qwen3-4B-Instruct
+    --tuner_type lora \              # 微调方式：LoRA（低秩适应，节省显存）
+    --dataset /media/ddc/新加卷/hys/qmy/agent/data/sft_train.jsonl \  
+    --torch_dtype bfloat16 \         # 训练精度：BF16（节省显存，适合 A100/H100）
+    --num_train_epochs 1 \           # 训练轮数：1 轮
+    --per_device_train_batch_size 1 \ # 每卡训练 batch size：1
+    --per_device_eval_batch_size 1 \ # 每卡评估 batch size：1
+    --learning_rate 1e-4 \           # 学习率：0.0001
+    --lora_rank 8 \                  # LoRA 秩：8（越大拟合能力越强，但显存占用越多）
+    --lora_alpha 32 \                # LoRA alpha：32（通常为 rank 的 4 倍）
+    --target_modules all-linear \    # LoRA 作用于所有线性层
+    --gradient_accumulation_steps 16 \ # 梯度累积步数：16（等效 batch_size = 16）
+    --eval_steps 50 \                # 每 50 步评估一次
+    --save_steps 50 \                # 每 50 步保存一次 checkpoint
+    --save_total_limit 2 \           # 最多保留 2 个 checkpoint（自动删除旧的）
+    --logging_steps 5 \              # 每 5 步打印一次日志
+    --max_length 2048 \              # 最大序列长度：2048 tokens
+    --output_dir output \           # 输出目录：output/
+    --warmup_ratio 0.05 \            # 预热比例：前 5% 步数线性增加学习率
+    --dataloader_num_workers 4 \     # 数据加载线程数：4
+    --model_author swift \          # 自我认知：作者名设为 swift
+    --model_name swift-robot         # 自我认知：模型名设为 swift-robot
 ```
 
 小贴士：
