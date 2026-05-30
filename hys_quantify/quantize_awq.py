@@ -8,10 +8,14 @@ AWQ 量化脚本 - 使用 llm-compressor 进行 AWQ 量化
         --dataset alpaca-en \
         --bits 4
 """
+import os
 import json
 import shutil
 import argparse
 from pathlib import Path
+
+# 禁用 compressed_tensors 的设备分发，避免 PyTorch 版本兼容性问题
+os.environ['CT_DISABLE_DEVICE_DISPATCH'] = '1'
 
 
 def parse_args():
@@ -115,7 +119,7 @@ def quantize_model(args):
     # 加载校准数据集
     print('步骤 3: 加载校准数据集...')
     dataset_path = Path(args.dataset)
-    if dataset_path.exists():
+    if dataset_path.exists() and dataset_path.is_file():
         from datasets import load_dataset
         ds = load_dataset("json", data_files=str(dataset_path), split="train")
         ds = ds.shuffle(seed=42).select(range(min(args.num_calibration_samples, len(ds))))
@@ -127,8 +131,21 @@ def quantize_model(args):
         ds = ds.map(preprocess, remove_columns=ds.column_names)
         dataset = ds
         print(f'加载本地数据集: {dataset_path} ({len(ds)} 条)')
+    elif dataset_path.exists() and dataset_path.is_dir():
+        raise ValueError(f'数据集路径是一个目录，需要指定 JSONL 文件: {dataset_path}')
     else:
-        dataset = args.dataset
+        # 检查是否是注册的数据集名称
+        registered_datasets = ['c4', 'cnn-dailymail', 'custom', 'evolcodealpaca',
+                              'flickr', 'gsm8k', 'open-platypus', 'peoples-speech',
+                              'ultrachat-200k', 'wikitext']
+        if args.dataset in registered_datasets:
+            dataset = args.dataset
+            print(f'使用注册数据集: {args.dataset}')
+        else:
+            raise FileNotFoundError(
+                f'数据集文件不存在: {dataset_path}\n'
+                f'请检查路径是否正确，或使用以下注册数据集之一: {registered_datasets}'
+            )
 
     # 执行量化
     print('步骤 4: 执行量化...')
