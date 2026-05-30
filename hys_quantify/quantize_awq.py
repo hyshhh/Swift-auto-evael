@@ -155,7 +155,11 @@ def quantize_model(args):
     def patched_get_device_memory():
         import torch
         if torch.cuda.is_available():
-            return {torch.device("cuda", 0): torch.cuda.get_device_properties(0).total_mem}
+            device_count = torch.cuda.device_count()
+            return {
+                torch.device("cuda", i): torch.cuda.get_device_properties(i).total_mem
+                for i in range(device_count)
+            }
         return {torch.device("cpu"): 0}
     dispatch_module.get_device_memory = patched_get_device_memory
 
