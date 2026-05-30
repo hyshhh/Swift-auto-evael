@@ -164,7 +164,7 @@ def quantize_model(args):
         if torch.cuda.is_available():
             device_count = torch.cuda.device_count()
             return {
-                torch.device("cuda", i): torch.cuda.get_device_properties(i).total_mem
+                torch.device("cuda", i): torch.cuda.get_device_properties(i).total_memory
                 for i in range(device_count)
             }
         return {torch.device("cpu"): 0}
