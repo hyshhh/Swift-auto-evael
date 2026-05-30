@@ -176,12 +176,9 @@ def quantize_model(args):
         recipe=recipe,
         max_seq_length=args.max_seq_length,
         num_calibration_samples=args.num_calibration_samples,
+        output_dir=str(output_path),
+        save_compressed=False,
     )
-
-    # 保存模型
-    print('步骤 5: 保存量化模型...')
-    model.save_pretrained(str(output_path), save_compressed=False)
-    tokenizer.save_pretrained(str(output_path))
 
     # 复制配置文件
     if args.copy_config and args.official_model:
