@@ -1380,11 +1380,13 @@ def _patch_qwen3_5_linear_attention_sequence_parallel() -> None:
         from swift.sequence_parallel import sequence_parallel as sequence_parallel_context
 
         if not _sp_is_enabled(sequence_parallel_context):
-            kwargs = {}
+            fwd_kwargs = {}
             if 'cache_position' in parameters:
-                kwargs['cache_position'] = cache_position
+                fwd_kwargs['cache_position'] = cache_position
+            if 'use_cache' in parameters:
+                fwd_kwargs['use_cache'] = kwargs.get('use_cache')
             return origin_forward(
-                mod, hidden_states, cache_params=cache_params, attention_mask=attention_mask, **kwargs)
+                mod, hidden_states, cache_params=cache_params, attention_mask=attention_mask, **fwd_kwargs)
 
         if int(getattr(sequence_parallel_context, 'rp_world_size', 1) or 1) > 1:
             requested_sp_size = int(getattr(sequence_parallel_context, 'world_size', 1) or 1)
