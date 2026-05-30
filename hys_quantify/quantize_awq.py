@@ -142,7 +142,7 @@ def quantize_model(args):
 
     # 保存模型
     print('步骤 5: 保存量化模型...')
-    model.save_pretrained(str(output_path), save_compressed=True)
+    model.save_pretrained(str(output_path), save_compressed=False)
     tokenizer.save_pretrained(str(output_path))
 
     # 复制配置文件
