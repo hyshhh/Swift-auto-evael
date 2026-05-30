@@ -6,7 +6,8 @@ AWQ 量化脚本 - 使用 llm-compressor 进行 AWQ 量化
         --model /path/to/merged_model \
         --output /path/to/awq_model \
         --dataset alpaca-en \
-        --bits 4
+        --bits 4 \
+        --gpu 0,1
 """
 import os
 import json
@@ -29,6 +30,7 @@ def parse_args():
     parser.add_argument('--official_model', type=str, default=None, help='官方模型路径（用于复制配置）')
     parser.add_argument('--max_seq_length', type=int, default=512, help='最大序列长度')
     parser.add_argument('--num_calibration_samples', type=int, default=128, help='校准样本数量')
+    parser.add_argument('--gpu', type=str, default=None, help='指定使用的 GPU，如 "0" 或 "0,1" 或 "1,2,3"')
     return parser.parse_args()
 
 
@@ -63,6 +65,11 @@ def copy_config_files(official_model, output_path):
 
 def quantize_model(args):
     """执行 AWQ 量化"""
+    # 在导入 torch 之前设置 GPU，确保只使用指定的显卡
+    if args.gpu is not None:
+        os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
+        print(f'使用 GPU: {args.gpu}')
+
     import swift  # 注册 qwen3_5 等自定义模型类型到 transformers
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from llmcompressor import oneshot
