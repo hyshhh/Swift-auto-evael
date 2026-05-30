@@ -149,6 +149,16 @@ def quantize_model(args):
 
     # 执行量化
     print('步骤 4: 执行量化...')
+
+    # Monkey-patch: 绕过 torch.accelerator.get_memory_info 兼容性问题
+    import compressed_tensors.offload.dispatch as dispatch_module
+    def patched_get_device_memory():
+        import torch
+        if torch.cuda.is_available():
+            return {torch.device("cuda", 0): torch.cuda.get_device_properties(0).total_mem}
+        return {torch.device("cpu"): 0}
+    dispatch_module.get_device_memory = patched_get_device_memory
+
     oneshot(
         model=model,
         dataset=dataset,
