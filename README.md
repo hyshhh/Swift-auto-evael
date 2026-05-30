@@ -27,7 +27,12 @@
 ---
 
 ## 🎯 项目背景
-
+### 环境配置
+    conda create -n swifthys python=3.10 -y
+    conda activate swifthys
+    pip install ms-swift -U
+    pip install "qwen_vl_utils>=0.0.14" decord
+    pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124
 ### 问题描述
 
 在使用 ms-swift 框架对 Qwen3.5 模型进行 LoRA 微调后，通过 `swift export --merge_lora` 命令合并权重时，会遇到以下问题：
@@ -182,27 +187,27 @@ CUDA_VISIBLE_DEVICES=0 python quantize_awq.py \
 
 | 组件 | 版本要求 | 推荐版本 | 说明 |
 |------|----------|----------|------|
-| Python | >=3.10 | 3.12 | 运行环境 |
-| CUDA | >=12.0 | 12.4/12.8 | GPU 支持 |
-| PyTorch | >=2.0 | 2.8.0 | 深度学习框架 |
-| transformers | >=4.33,<5.6.0 | 4.57.6 | 模型加载 |
-| vllm | >=0.5.1 | 0.19.0 | 推理引擎 |
+| Python | >=3.10 | 3.10 | 运行环境 |
+| CUDA | >=12.0 | 12.4 | GPU 支持 |
+| PyTorch | >=2.0 | 2.6.0 | 深度学习框架 |
+| transformers | >=5.0.0.dev | - | 模型加载 |
+| ms-swift | >=4.2.0 | 4.2.2 | 训练框架 |
 
 ### 安装依赖
 
 ```bash
 # 基础环境
-conda create -n swift python=3.12 -y
-conda activate swift
-
-# 安装 PyTorch（根据你的 CUDA 版本）
-pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu124
+conda create -n swifthys python=3.10 -y
+conda activate swifthys
 
 # 安装 ms-swift
 pip install ms-swift -U
 
-# 安装 vLLM
-pip install vllm -U
+# 安装多模态依赖
+pip install "qwen_vl_utils>=0.0.14" decord
+
+# 安装 PyTorch（根据你的 CUDA 版本）
+pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124
 ```
 
 ---
