@@ -63,6 +63,28 @@ def copy_config_files(official_model, output_path):
             print(f'删除: {extra_file}')
 
 
+def patch_qwen35_init_use_cache():
+    """AutoAWQ may pass use_cache into the model constructor; Qwen3.5 does not accept it."""
+    try:
+        from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5ForCausalLM
+    except Exception as e:
+        print(f'跳过 Qwen3.5 use_cache 兼容补丁: {e}')
+        return
+
+    if getattr(Qwen3_5ForCausalLM.__init__, '_hys_use_cache_patched', False):
+        return
+
+    old_init = Qwen3_5ForCausalLM.__init__
+
+    def patched_init(self, *args, **kwargs):
+        kwargs.pop('use_cache', None)
+        return old_init(self, *args, **kwargs)
+
+    patched_init._hys_use_cache_patched = True
+    Qwen3_5ForCausalLM.__init__ = patched_init
+    print('已应用 Qwen3.5 use_cache 构造参数兼容补丁')
+
+
 def quantize_model(args):
     """执行 AWQ 量化"""
     if args.gpu is not None:
@@ -70,6 +92,7 @@ def quantize_model(args):
         print(f'使用 GPU: {args.gpu}')
 
     import swift  # 注册 qwen3_5 等自定义模型类型到 transformers
+    patch_qwen35_init_use_cache()
 
     # AutoAWQ 不认识 qwen3_5，monkey-patch 注册复用 Qwen3 处理器
     from awq.models.auto import AWQ_CAUSAL_LM_MODEL_MAP
