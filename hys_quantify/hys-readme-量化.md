@@ -16,8 +16,16 @@ CUDA_VISIBLE_DEVICES=0 python quantize_awq.py \
     --bits 4 --group_size 128 \
     --dataset /media/ddc/新加卷/hys/qmy/agent/data/sft_val.jsonl \
     --copy_config --official_model /media/ddc/新加卷/hys/hysnew/Qwen/Qwen3.5-2B
-```
 
+python quantize_autoawq.py \
+    --model /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b \
+    --output /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b-awq \
+    --dataset /media/ddc/新加卷/hys/qmy/agent/data/sft_val.jsonl \
+    --bits 4 --group_size 128 \
+    --copy_config --official_model /media/ddc/新加卷/hys/hysnew/Qwen/Qwen3.5-2B \
+    --gpu 1
+```
+CUDA_VISIBLE_DEVICES=2 vllm serve /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b-awq     --api-key abc123     --served-model-name Qwen/Qwen3-VL-4B-AWQ     --max-model-len 10240     --port 7890     --gpu-memory-utilization 0.15     --max-num-seqs 10     --enable-auto-tool-choice     --tool-call-parser qwen3_xml
 ## 量化参数说明
 
 | 参数 | 值 | 说明 |

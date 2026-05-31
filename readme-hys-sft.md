@@ -73,14 +73,17 @@ conda activate swift
 CUDA_VISIBLE_DEVICES=1 \
 swift sft \
     --model /media/ddc/新加卷/hys/hysnew/Qwen/Qwen3.5-2B \
+    --quant_bits 4 \
     --tuner_type lora \
     --dataset /media/ddc/新加卷/hys/qmy/agent/data/sft_train.jsonl \
     --torch_dtype bfloat16 \
     --num_train_epochs 10 \
-    --per_device_train_batch_size 2 \
+    --per_device_train_batch_size 4 \
     --per_device_eval_batch_size 1 \
     --learning_rate 1e-4 \
-    --lora_rank 2 \
+    --lora_rank 4 \
+    --freeze_llm true \
+    --freeze_vit true \
     --lora_alpha 8 \
     --target_modules all-linear \
     --gradient_accumulation_steps 32 \
@@ -94,6 +97,7 @@ swift sft \
     --dataloader_num_workers 6 \
     --model_author swift \
     --model_name swift-robot
+
 ```
 
 ## 7. AWQ 量化

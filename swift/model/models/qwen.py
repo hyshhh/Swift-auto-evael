@@ -1375,6 +1375,7 @@ def _patch_qwen3_5_linear_attention_sequence_parallel() -> None:
         cache_params=None,
         cache_position=None,
         attention_mask: Optional[torch.Tensor] = None,
+        use_cache=None,
         **kwargs,
     ):
         from swift.sequence_parallel import sequence_parallel as sequence_parallel_context
@@ -1384,7 +1385,7 @@ def _patch_qwen3_5_linear_attention_sequence_parallel() -> None:
             if 'cache_position' in parameters:
                 fwd_kwargs['cache_position'] = cache_position
             if 'use_cache' in parameters:
-                fwd_kwargs['use_cache'] = kwargs.get('use_cache')
+                fwd_kwargs['use_cache'] = use_cache
             return origin_forward(
                 mod, hidden_states, cache_params=cache_params, attention_mask=attention_mask, **fwd_kwargs)
 
