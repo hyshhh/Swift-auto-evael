@@ -85,6 +85,52 @@ def patch_qwen35_init_use_cache():
     print('已应用 Qwen3.5 use_cache 构造参数兼容补丁')
 
 
+
+def patch_qwen35_awq_get_layers_for_scaling(awq_model):
+    import torch
+    from awq.models.qwen3 import Qwen3AWQForCausalLM
+    hf_model = awq_model.model
+    if not hasattr(hf_model, "model") or not hasattr(hf_model.model, "layers"):
+        print("skip: no layers")
+        return
+    decoder_layers = hf_model.model.layers
+    if len(decoder_layers) == 0:
+        print("skip: empty layers")
+        return
+    first_layer = decoder_layers[0]
+    layer_type = type(first_layer).__name__
+    print(f"DecoderLayer type: {layer_type}")
+    if hasattr(first_layer, "self_attn"):
+        print("self_attn exists, no patch needed")
+        return
+    candidate_attrs = []
+    for attr_name in dir(first_layer):
+        if attr_name.startswith("_"):
+            continue
+        try:
+            attr = getattr(first_layer, attr_name)
+        except Exception:
+            continue
+        if not isinstance(attr, torch.nn.Module):
+            continue
+        for sub_name, sub_module in attr.named_modules():
+            if "q_proj" in sub_name and isinstance(sub_module, torch.nn.Linear):
+                candidate_attrs.append(attr_name)
+                break
+    if not candidate_attrs:
+        print("warning: no q_proj found")
+        return
+    attn_attr = candidate_attrs[0]
+    print(f"found attn attr: {attn_attr}")
+    def patched_get_layers_for_scaling(self):
+        layers = self.model.model.layers
+        modules = []
+        for layer in layers:
+            attn = getattr(layer, attn_attr)
+            modules.extend([attn.q_proj, attn.k_proj, attn.v_proj, attn.o_proj])
+        return modules
+    Qwen3AWQForCausalLM.get_layers_for_scaling = patched_get_layers_for_scaling
+    print(f"patched get_layers_for_scaling with attr: {attn_attr}")
 def quantize_model(args):
     """执行 AWQ 量化"""
     if args.gpu is not None:
@@ -141,6 +187,7 @@ def quantize_model(args):
     # 禁用缓存以节省内存
     if hasattr(model, 'config'):
         model.config.use_cache = False
+    patch_qwen35_awq_get_layers_for_scaling(model)
     tokenizer = AutoTokenizer.from_pretrained(
         str(model_path),
         trust_remote_code=True,
