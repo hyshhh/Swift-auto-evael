@@ -113,9 +113,11 @@ def quantize_model(args):
     model = AutoAWQForCausalLM.from_pretrained(
         str(model_path),
         low_cpu_mem_usage=True,
-        use_cache=False,
         trust_remote_code=True,
     )
+    # 禁用缓存以节省内存
+    if hasattr(model, 'config'):
+        model.config.use_cache = False
     tokenizer = AutoTokenizer.from_pretrained(
         str(model_path),
         trust_remote_code=True,
