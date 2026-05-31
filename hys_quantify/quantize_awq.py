@@ -179,8 +179,11 @@ def quantize_model(args):
         num_calibration_samples=args.num_calibration_samples,
     )
 
-    # 保存模型（用小 shard 避免内存不足卡死）
+    # 保存模型：先移到 CPU 避免 offloaded modules 导致 OOM
     print('步骤 5: 保存量化模型...')
+    import torch
+    model.to("cpu")
+    torch.cuda.empty_cache()
     model.save_pretrained(str(output_path), save_compressed=False, max_shard_size=args.max_shard_size)
     tokenizer.save_pretrained(str(output_path))
 
