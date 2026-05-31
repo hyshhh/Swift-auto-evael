@@ -70,6 +70,16 @@ def quantize_model(args):
         print(f'使用 GPU: {args.gpu}')
 
     import swift  # 注册 qwen3_5 等自定义模型类型到 transformers
+
+    # AutoAWQ 不认识 qwen3_5，monkey-patch 注册复用 Qwen3 处理器
+    from awq.models.auto import AWQ_CAUSAL_LM_MODEL_MAP
+    from awq.models.base import TRANSFORMERS_AUTO_MAPPING_DICT
+    if "qwen3_5" not in AWQ_CAUSAL_LM_MODEL_MAP:
+        from awq.models.qwen3 import Qwen3AWQForCausalLM
+        AWQ_CAUSAL_LM_MODEL_MAP["qwen3_5"] = Qwen3AWQForCausalLM
+        TRANSFORMERS_AUTO_MAPPING_DICT["qwen3_5"] = "AutoModelForCausalLM"
+        print('已注册 qwen3_5 到 AutoAWQ（复用 Qwen3 处理器）')
+
     from awq import AutoAWQForCausalLM
     from transformers import AutoTokenizer
 
