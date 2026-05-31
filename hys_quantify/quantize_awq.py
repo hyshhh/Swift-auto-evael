@@ -31,6 +31,7 @@ def parse_args():
     parser.add_argument('--max_seq_length', type=int, default=512, help='最大序列长度')
     parser.add_argument('--num_calibration_samples', type=int, default=128, help='校准样本数量')
     parser.add_argument('--gpu', type=str, default=None, help='指定使用的 GPU，如 "0" 或 "0,1" 或 "1,2,3"')
+    parser.add_argument('--max_shard_size', type=str, default='2GB', help='保存时每个分片的最大大小（默认 2GB）')
     return parser.parse_args()
 
 
@@ -180,7 +181,7 @@ def quantize_model(args):
 
     # 保存模型（用小 shard 避免内存不足卡死）
     print('步骤 5: 保存量化模型...')
-    model.save_pretrained(str(output_path), save_compressed=False, max_shard_size="2GB")
+    model.save_pretrained(str(output_path), save_compressed=False, max_shard_size=args.max_shard_size)
     tokenizer.save_pretrained(str(output_path))
 
     # 复制配置文件
