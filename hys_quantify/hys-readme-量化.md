@@ -73,7 +73,9 @@ CUDA_VISIBLE_DEVICES=2 vllm serve /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen
     --tool-call-parser qwen3_xml
 ```
 
-### GPTQ 模型
+### GPTQ 模型（vLLM）
+
+> ⚠️ vLLM 对 Qwen3.5 多模态 GPTQ 模型兼容性有限，可能报权重加载错误。
 
 ```bash
 conda activate vllm
@@ -89,6 +91,52 @@ CUDA_VISIBLE_DEVICES=2 vllm serve /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen
     --max-num-seqs 10 \
     --enable-auto-tool-choice \
     --tool-call-parser qwen3_xml
+```
+
+### GPTQ 模型（LMDeploy，推荐）
+
+> ⚠️ LMDeploy TurboMind 引擎支持 GPTQ 量化，但**不支持 Qwen3.5 视觉编码器**（仅文本推理）。
+
+```bash
+pip install lmdeploy
+
+# TurboMind 引擎 + GPTQ 量化（仅文本）
+CUDA_VISIBLE_DEVICES=2 lmdeploy serve api_server \
+    /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b-gptq \
+    --backend turbomind \
+    --model-format gptq \
+    --server-port 7890 \
+    --tp 1
+```
+
+### GPTQ 模型（transformers 直接加载，支持多模态）
+
+> 如果需要完整的多模态功能（图像理解），用 transformers 直接加载。
+
+```bash
+conda activate swifthys
+
+python -c "
+from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
+
+model = AutoModelForCausalLM.from_pretrained(
+    '/media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b-gptq',
+    device_map='cuda:0',
+    torch_dtype=torch.float16,
+    trust_remote_code=True,
+)
+tokenizer = AutoTokenizer.from_pretrained(
+    '/media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b-gptq',
+    trust_remote_code=True,
+)
+
+messages = [{'role': 'user', 'content': '你好，请介绍一下你自己'}]
+text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+inputs = tokenizer(text, return_tensors='pt').to('cuda')
+output = model.generate(**inputs, max_new_tokens=512, temperature=0)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+"
 ```
 ## 量化参数说明
 
