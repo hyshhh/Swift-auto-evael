@@ -64,6 +64,28 @@ try:
 except AttributeError:
     model.save_quantized(output_path)
 
+# 修复权重名称前缀：language_model.model. -> model.
+print("\n步骤 4.5: 修复权重名称前缀...")
+import glob
+from safetensors import safe_open
+from safetensors.torch import save_file
+
+safetensor_files = glob.glob(os.path.join(output_path, "*.safetensors"))
+for st_file in safetensor_files:
+    print(f"  处理: {os.path.basename(st_file)}")
+    tensors = {}
+    with safe_open(st_file, framework="pt", device="cpu") as f:
+        for key in f.keys():
+            new_key = key
+            # 将 language_model.model. 替换为 model.
+            if key.startswith("language_model.model."):
+                new_key = "model." + key[len("language_model.model."):]
+            tensors[new_key] = f.get_tensor(key)
+    save_file(tensors, st_file)
+    print(f"    已修复 {len(tensors)} 个权重键")
+
+print("  权重名称修复完成")
+
 # 保存分词器
 tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
 tokenizer.save_pretrained(output_path)
@@ -114,6 +136,17 @@ if config_path.exists():
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
         print("  已添加 quantization_config")
+
+    # 修复 architectures 字段，确保 vLLM 正确识别模型架构
+    if 'architectures' in config:
+        original_archs = config['architectures']
+        # 检查是否需要添加视觉模型架构
+        has_visual = any(os.path.exists(output_dir / f) for f in ['visual.safetensors', 'model.safetensors'])
+        if has_visual and 'Qwen3_5ForConditionalGeneration' not in original_archs:
+            config['architectures'] = ['Qwen3_5ForConditionalGeneration']
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+            print(f"  已修复 architectures: {original_archs} -> {config['architectures']}")
 
 print(f"\n量化完成！保存到: {output_path}")
 
