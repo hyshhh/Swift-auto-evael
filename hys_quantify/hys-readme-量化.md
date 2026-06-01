@@ -1,18 +1,23 @@
 ## 环境准备
 
 ```bash
+# AWQ 量化环境
 conda create -n llmpress python=3.10 -y
 conda activate llmpress
-pip install llmcompressor
-pip install ms-swift
+pip install llmcompressor ms-swift
 
-# GPTQ 量化依赖（推荐，原生支持 Qwen3.5）
-pip install gptqmodel optimum accelerate
+# GPTQ 量化环境（推荐，原生支持 Qwen3.5 多模态）
+conda create -n swifthys python=3.10 -y
+conda activate swifthys
+pip install ms-swift gptqmodel optimum accelerate
 ```
 
-## 运行
+## AWQ 量化
 
 ```bash
+conda activate llmpress
+
+# 方式一：使用 llmcompressor（推荐）
 CUDA_VISIBLE_DEVICES=0 python quantize_awq.py \
     --model /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b \
     --output /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b-awq \
@@ -20,6 +25,7 @@ CUDA_VISIBLE_DEVICES=0 python quantize_awq.py \
     --dataset /media/ddc/新加卷/hys/qmy/agent/data/sft_val.jsonl \
     --copy_config --official_model /media/ddc/新加卷/hys/hysnew/Qwen/Qwen3.5-2B
 
+# 方式二：使用 AutoAWQ
 python quantize_autoawq.py \
     --model /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b \
     --output /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b-awq \
@@ -29,9 +35,17 @@ python quantize_autoawq.py \
     --gpu 1
 ```
 
-### GPTQ 量化（推荐，原生支持 Qwen3.5）
+## GPTQ 量化（推荐）
+
+> GPTQ 对 Qwen3.5 多模态架构支持更好，同时量化语言模型和视觉编码器。
 
 ```bash
+conda activate swifthys
+
+# 方式一：使用 run_gptq_swift.py（推荐，自动处理多模态配置）
+python run_gptq_swift.py
+
+# 方式二：使用 quantize_gptq.py（需要指定参数）
 python quantize_gptq.py \
     --model /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b \
     --output /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b-gptq \
@@ -41,17 +55,13 @@ python quantize_gptq.py \
     --gpu 0
 ```
 
-或使用运行脚本：
-
-```bash
-bash run_quantize_gptq.sh
-```
-
 ## vLLM 推理服务
 
 ### AWQ 模型
 
 ```bash
+conda activate vllm
+
 CUDA_VISIBLE_DEVICES=2 vllm serve /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b-awq \
     --api-key abc123 \
     --served-model-name Qwen/Qwen3-VL-4B-AWQ \
@@ -66,11 +76,15 @@ CUDA_VISIBLE_DEVICES=2 vllm serve /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen
 ### GPTQ 模型
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 vllm serve /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b-gptq \
+conda activate vllm
+
+CUDA_VISIBLE_DEVICES=2 vllm serve /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b-gptq \
     --api-key abc123 \
     --served-model-name Qwen/Qwen3.5-2B-GPTQ \
     --max-model-len 10240 \
     --port 7890 \
+    --quantization gptq \
+    --dtype float16 \
     --gpu-memory-utilization 0.15 \
     --max-num-seqs 10 \
     --enable-auto-tool-choice \

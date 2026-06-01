@@ -123,6 +123,39 @@ CUDA_VISIBLE_DEVICES=0 python quantize_awq.py \
     --official_model /media/ddc/新加卷/hys/hysnew/Qwen/Qwen3.5-2B
 ```
 
+## 8. GPTQ 量化
+
+```bash
+# 激活环境
+conda activate swifthys
+
+# 安装依赖（如未安装）
+pip install gptqmodel optimum accelerate
+
+# 运行量化（使用 gptqmodel 直接量化，支持 Qwen3.5 多模态）
+cd /media/ddc/新加卷/hys/hysnew3/Swift-auto-evael/hys_quantify
+
+python run_gptq_swift.py
+```
+
+> **说明**：`run_gptq_swift.py` 会同时量化语言模型和视觉编码器，并自动复制所有配置文件。
+
+### GPTQ 模型推理
+
+```bash
+# 激活环境
+conda activate vllm
+
+CUDA_VISIBLE_DEVICES=2 vllm serve /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b-gptq \
+    --api-key abc123 \
+    --served-model-name Qwen/Qwen3.5-2B-GPTQ \
+    --max-model-len 10240 \
+    --port 7890 \
+    --quantization gptq \
+    --dtype float16 \
+    --gpu-memory-utilization 0.15
+```
+
 ---
 
 ## 参数说明
