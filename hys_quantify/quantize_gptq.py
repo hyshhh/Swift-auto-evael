@@ -139,7 +139,8 @@ def quantize_model(args):
         os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
         print(f'使用 GPU: {args.gpu}')
 
-    from gptqmodel import GPTQModel, GPTQConfig
+    from gptqmodel import GPTQModel
+    from gptqmodel.quantization.config import GPTQConfig
     from transformers import AutoTokenizer
 
     print('=' * 60)
@@ -202,7 +203,10 @@ def quantize_model(args):
 
     # 步骤 5: 保存量化模型
     print('步骤 5: 保存量化模型...')
-    model.save(str(output_path))
+    try:
+        model.save(str(output_path))
+    except AttributeError:
+        model.save_quantized(str(output_path))
 
     # 保存分词器
     tokenizer = AutoTokenizer.from_pretrained(
