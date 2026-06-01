@@ -30,6 +30,10 @@ quantize_config = QuantizeConfig(
 
 # 加载模型
 print("步骤 1: 加载模型...")
+from transformers import AutoModel
+
+# 强制使用多模态模型类
+print("  使用 Qwen3_5ForConditionalGeneration 架构加载多模态模型...")
 model = GPTQModel.load(
     model_path,
     quantize_config=quantize_config,
