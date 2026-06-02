@@ -2,11 +2,15 @@
 """
 BnB NF4 量化脚本 - 适配 Qwen3.5 多模态模型
 仅量化语言模型部分，视觉编码器保持 FP16/BF16
+
+支持流式保存，避免卡住问题
 """
 
 import os
+import gc
 import argparse
 import torch
+from tqdm import tqdm
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -26,6 +30,8 @@ def parse_args():
                        choices=["float16", "bfloat16", "float32"], help="计算精度")
     parser.add_argument("--save_merged", action="store_true", help="保存合并后的模型（不含量化配置）")
     parser.add_argument("--push_to_hub", type=str, default=None, help="推送到 HuggingFace Hub")
+    parser.add_argument("--max_shard_size", type=str, default="5GB", help="每个分片最大大小")
+    parser.add_argument("--use_safetensors", action="store_true", default=True, help="使用 safetensors 格式（推荐）")
     return parser.parse_args()
 
 
@@ -115,36 +121,66 @@ def main():
     if args.bits == 4 and args.double_quant:
         print("  双重量化: 已启用（约节省 0.4 bit/参数）")
 
-    # 5. 保存模型
+    # 5. 保存模型（流式写入，避免卡住）
     print(f"\n[4/4] 保存模型到 {args.output}...")
+    print(f"  使用格式: {'safetensors' if args.use_safetensors else 'pytorch'}")
+    print(f"  分片大小: {args.max_shard_size}")
     os.makedirs(args.output, exist_ok=True)
 
-    # 保存量化模型
-    model.save_pretrained(args.output)
-    tokenizer.save_pretrained(args.output)
+    # 使用流式保存，避免内存占用过高
+    print("  正在保存模型分片...")
 
+    # 保存配置和分片权重
+    model.save_pretrained(
+        args.output,
+        max_shard_size=args.max_shard_size,
+        safe_serialization=args.use_safetensors,
+    )
+    print("  ✓ 模型权重保存完成")
+
+    # 保存 tokenizer
+    tokenizer.save_pretrained(args.output)
+    print("  ✓ Tokenizer 保存完成")
+
+    # 保存 processor（多模态模型）
     if has_processor and processor is not None:
         processor.save_pretrained(args.output)
+        print("  ✓ Processor 保存完成")
 
     # 如果需要保存合并模型（不含量化配置，用于部署）
     if args.save_merged:
-        print("  保存合并模型...")
+        print("\n  保存合并模型（反量化为 FP16）...")
         merged_path = os.path.join(args.output, "merged")
         os.makedirs(merged_path, exist_ok=True)
 
-        # 注意：合并后模型会变大（反量化为 FP16）
-        from peft import PeftModel
+        # 释放当前模型内存
+        del model
+        gc.collect()
+        torch.cuda.empty_cache()
+
+        # 重新加载原始模型（FP16）
         model_unmerged = AutoModelForCausalLM.from_pretrained(
             args.model,
             device_map="auto",
             trust_remote_code=True,
             torch_dtype=get_compute_dtype(args.compute_dtype),
+            low_cpu_mem_usage=True,  # 降低内存占用
         )
-        model_unmerged.save_pretrained(merged_path)
+
+        # 流式保存合并模型
+        model_unmerged.save_pretrained(
+            merged_path,
+            max_shard_size=args.max_shard_size,
+            safe_serialization=args.use_safetensors,
+        )
         tokenizer.save_pretrained(merged_path)
         if has_processor and processor is not None:
             processor.save_pretrained(merged_path)
+
         del model_unmerged
+        gc.collect()
+        torch.cuda.empty_cache()
+        print("  ✓ 合并模型保存完成")
 
     # 推送到 Hub
     if args.push_to_hub:

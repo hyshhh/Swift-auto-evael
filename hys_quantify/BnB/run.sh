@@ -1,5 +1,5 @@
 #!/bin/bash
-# BnB NF4 量化启动脚本
+# BnB NF4 量化启动脚本（支持流式保存）
 
 set -e
 
@@ -13,6 +13,8 @@ OUTPUT_PATH="/media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b-bnb-nf4"
 BITS=4
 DOUBLE_QUANT=true
 COMPUTE_DTYPE="bfloat16"
+MAX_SHARD_SIZE="5GB"  # 每个分片最大大小（避免单文件过大）
+SAVE_MERGED=false     # 是否保存合并模型（会变大）
 
 # ==================== 环境检查 ====================
 echo "=========================================="
@@ -51,13 +53,17 @@ case $CHOICE in
                 --output $OUTPUT_PATH \
                 --bits 4 \
                 --double_quant \
-                --compute_dtype $COMPUTE_DTYPE
+                --compute_dtype $COMPUTE_DTYPE \
+                --max_shard_size $MAX_SHARD_SIZE \
+                --use_safetensors
         else
             python quantize_bnb.py \
                 --model $MODEL_PATH \
                 --output $OUTPUT_PATH \
                 --bits 4 \
-                --compute_dtype $COMPUTE_DTYPE
+                --compute_dtype $COMPUTE_DTYPE \
+                --max_shard_size $MAX_SHARD_SIZE \
+                --use_safetensors
         fi
         ;;
 esac
