@@ -1,23 +1,40 @@
 #!/usr/bin/env python3
 """
 BnB NF4 量化脚本 - 适配 Qwen3.5 多模态模型
-仅量化语言模型部分，视觉编码器保持 FP16/BF16
+量化语言模型部分，视觉编码器保持 FP16/BF16
 
 支持流式保存，避免卡住问题
 """
 
 import os
 import gc
+import json
 import argparse
 import torch
 from tqdm import tqdm
 from transformers import (
     AutoModelForCausalLM,
+    AutoModel,
     AutoTokenizer,
     AutoProcessor,
     BitsAndBytesConfig,
 )
 from peft import prepare_model_for_kbit_training
+
+
+def detect_model_type(model_path):
+    """检测模型类型，返回正确的加载类名"""
+    config_path = os.path.join(model_path, "config.json")
+    if os.path.exists(config_path):
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        # 检查是否为多模态模型
+        if 'visual_config' in config or 'vision_config' in config:
+            return 'multimodal'
+        model_type = config.get('model_type', '')
+        if 'qwen' in model_type and 'vl' in model_type:
+            return 'multimodal'
+    return 'text_only'
 
 
 def parse_args():
@@ -73,15 +90,44 @@ def main():
 
     print("\n[1/4] 加载模型（量化配置）...")
 
-    # 2. 加载模型
-    # Qwen3.5 多模态模型需要 trust_remote_code
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model,
-        quantization_config=bnb_config,
-        device_map="auto",
-        trust_remote_code=True,
-        torch_dtype=get_compute_dtype(args.compute_dtype),
-    )
+    # 2. 检测模型类型
+    model_type = detect_model_type(args.model)
+    print(f"  检测到模型类型: {model_type}")
+
+    # 3. 加载模型（多模态模型使用正确的类）
+    if model_type == 'multimodal':
+        print("  使用多模态模型加载方式...")
+        try:
+            # 尝试导入 Qwen3 VL 模型类
+            from transformers import Qwen3VLForConditionalGeneration
+            model = Qwen3VLForConditionalGeneration.from_pretrained(
+                args.model,
+                quantization_config=bnb_config,
+                device_map="auto",
+                trust_remote_code=True,
+                torch_dtype=get_compute_dtype(args.compute_dtype),
+            )
+            print("  ✓ 使用 Qwen3VLForConditionalGeneration 加载")
+        except ImportError:
+            # 如果没有专门的类，使用 AutoModel
+            print("  尝试使用 AutoModel 加载...")
+            model = AutoModel.from_pretrained(
+                args.model,
+                quantization_config=bnb_config,
+                device_map="auto",
+                trust_remote_code=True,
+                torch_dtype=get_compute_dtype(args.compute_dtype),
+            )
+            print("  ✓ 使用 AutoModel 加载")
+    else:
+        print("  使用纯文本模型加载方式...")
+        model = AutoModelForCausalLM.from_pretrained(
+            args.model,
+            quantization_config=bnb_config,
+            device_map="auto",
+            trust_remote_code=True,
+            torch_dtype=get_compute_dtype(args.compute_dtype),
+        )
 
     # 3. 加载 tokenizer 和 processor
     print("[2/4] 加载 Tokenizer 和 Processor...")
@@ -113,6 +159,13 @@ def main():
     print("\n模型结构:")
     for name, module in model.named_children():
         print(f"  - {name}: {type(module).__name__}")
+
+    # 检查是否包含视觉编码器
+    has_visual = hasattr(model, 'visual') or any('visual' in name for name, _ in model.named_children())
+    if has_visual:
+        print("  ✓ 包含视觉编码器（多模态模型）")
+    else:
+        print("  ⚠ 未检测到视觉编码器（可能是纯文本模型）")
 
     # 打印量化信息
     print("\n量化配置:")
