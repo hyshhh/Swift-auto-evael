@@ -28,12 +28,25 @@ def detect_model_type(model_path):
     if os.path.exists(config_path):
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
-        # 检查是否为多模态模型
-        if 'visual_config' in config or 'vision_config' in config:
-            return 'multimodal'
+
         model_type = config.get('model_type', '')
-        if 'qwen' in model_type and 'vl' in model_type:
+
+        # 检查是否为 Qwen3 VL 多模态模型（qwen3_vl 而不是 qwen3_5）
+        if model_type == 'qwen3_vl':
+            return 'qwen3_vl'
+        # 检查是否为 Qwen2 VL 多模态模型
+        elif model_type == 'qwen2_vl':
+            return 'qwen2_vl'
+        # 检查是否有 visual_config（通用多模态检测）
+        elif 'visual_config' in config or 'vision_config' in config:
             return 'multimodal'
+        # Qwen3.5 纯文本模型
+        elif model_type == 'qwen3_5':
+            return 'qwen3_5_text'
+        # 其他 Qwen 纯文本模型
+        elif 'qwen' in model_type:
+            return 'qwen_text'
+
     return 'text_only'
 
 
@@ -94,32 +107,44 @@ def main():
     model_type = detect_model_type(args.model)
     print(f"  检测到模型类型: {model_type}")
 
-    # 3. 加载模型（多模态模型使用正确的类）
-    if model_type == 'multimodal':
-        print("  使用多模态模型加载方式...")
-        try:
-            # 尝试导入 Qwen3 VL 模型类
-            from transformers import Qwen3VLForConditionalGeneration
-            model = Qwen3VLForConditionalGeneration.from_pretrained(
-                args.model,
-                quantization_config=bnb_config,
-                device_map="auto",
-                trust_remote_code=True,
-                torch_dtype=get_compute_dtype(args.compute_dtype),
-            )
-            print("  ✓ 使用 Qwen3VLForConditionalGeneration 加载")
-        except ImportError:
-            # 如果没有专门的类，使用 AutoModel
-            print("  尝试使用 AutoModel 加载...")
-            model = AutoModel.from_pretrained(
-                args.model,
-                quantization_config=bnb_config,
-                device_map="auto",
-                trust_remote_code=True,
-                torch_dtype=get_compute_dtype(args.compute_dtype),
-            )
-            print("  ✓ 使用 AutoModel 加载")
+    # 3. 加载模型（根据类型选择正确的加载方式）
+    if model_type == 'qwen3_vl':
+        print("  使用 Qwen3 VL 多模态模型加载方式...")
+        from transformers import Qwen3VLForConditionalGeneration
+        model = Qwen3VLForConditionalGeneration.from_pretrained(
+            args.model,
+            quantization_config=bnb_config,
+            device_map="auto",
+            trust_remote_code=True,
+            torch_dtype=get_compute_dtype(args.compute_dtype),
+        )
+        print("  ✓ 使用 Qwen3VLForConditionalGeneration 加载")
+
+    elif model_type == 'qwen2_vl':
+        print("  使用 Qwen2 VL 多模态模型加载方式...")
+        from transformers import Qwen2VLForConditionalGeneration
+        model = Qwen2VLForConditionalGeneration.from_pretrained(
+            args.model,
+            quantization_config=bnb_config,
+            device_map="auto",
+            trust_remote_code=True,
+            torch_dtype=get_compute_dtype(args.compute_dtype),
+        )
+        print("  ✓ 使用 Qwen2VLForConditionalGeneration 加载")
+
+    elif model_type == 'multimodal':
+        print("  使用通用多模态模型加载方式...")
+        model = AutoModel.from_pretrained(
+            args.model,
+            quantization_config=bnb_config,
+            device_map="auto",
+            trust_remote_code=True,
+            torch_dtype=get_compute_dtype(args.compute_dtype),
+        )
+        print("  ✓ 使用 AutoModel 加载")
+
     else:
+        # 纯文本模型（qwen3_5_text, qwen_text, text_only）
         print("  使用纯文本模型加载方式...")
         model = AutoModelForCausalLM.from_pretrained(
             args.model,
@@ -128,6 +153,7 @@ def main():
             trust_remote_code=True,
             torch_dtype=get_compute_dtype(args.compute_dtype),
         )
+        print("  ✓ 使用 AutoModelForCausalLM 加载")
 
     # 3. 加载 tokenizer 和 processor
     print("[2/4] 加载 Tokenizer 和 Processor...")
