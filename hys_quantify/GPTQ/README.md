@@ -4,7 +4,7 @@
 
 ## 一句话总结
 
-> **GPTQ 是最成熟的 4-bit 量化方案，推理速度快，支持多模态，推荐生产部署。**
+> **GPTQ 是最成熟的 4-bit 量化方案，推理速度快，支持 Qwen3-VL 多模态（同时量化 LLM + ViT），推荐生产部署。**
 
 ---
 
@@ -17,7 +17,7 @@ conda activate gptq
 pip install ms-swift gptqmodel optimum accelerate
 
 # 2. 量化
-bash run.sh
+bash run_gptq.sh
 
 # 3. 验证
 python verify.py --model /path/to/output
@@ -29,10 +29,9 @@ python verify.py --model /path/to/output
 
 | 文件 | 用途 |
 |------|------|
-| `quantize_gptq.py` | GPTQ 量化脚本 |
+| `quantize_gptq.py` | GPTQ 量化脚本（支持 Qwen3-VL 多模态） |
 | `run_gptq_swift.py` | 使用 ms-swift 量化（推荐） |
-| `run.sh` | 一键启动脚本 |
-| `run_gptq.sh` | GPTQ 直接启动脚本 |
+| `run_gptq.sh` | 一键启动脚本 |
 
 ---
 
@@ -96,17 +95,24 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ---
 
-## 多模态支持
+## 多模态支持（Qwen3-VL）
 
-GPTQ 对 Qwen3.5 多模态架构支持最好：
+GPTQ 对 Qwen3-VL 多模态架构支持最好：
 
 ```
-量化策略：
-├── 语言模型 (LLM)  → GPTQ 4-bit 量化
-└── 视觉编码器 (VE) → GPTQ 4-bit 量化（同时量化）
+Qwen3-VL 结构：
+├── 语言模型 (LLM)      → GPTQ 4-bit 量化
+├── 视觉编码器 (ViT)    → GPTQ 4-bit 量化（同时量化）
+└── Projection 层       → GPTQ 4-bit 量化
 
 结果：完整的多模态推理 ✓
 ```
+
+### ViT 量化说明
+
+- ViT（Vision Transformer）是视觉编码器，负责处理图像
+- GPTQ 会同时量化 LLM 和 ViT，保持多模态功能
+- 量化后模型可以正常处理图像输入
 
 ---
 
