@@ -1,10 +1,10 @@
 #!/bin/bash
 # AWQ 量化启动脚本（支持 Qwen3-VL 多模态模型）
+# 参考: https://github.com/Junfeng-Pan/Qwen3-AWQ
 
 set -e
 
 # ==================== 配置区 ====================
-# 修改以下路径为你的实际路径
 
 MERGED_MODEL="/media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-Instruct"
 OFFICIAL_MODEL="/media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-Instruct"
@@ -16,12 +16,14 @@ DATASET_PATH="/media/ddc/新加卷/hys/qmy/agent/data/sft_val.jsonl"
 # 量化参数
 BITS=4
 GROUP_SIZE=128
+MAX_SEQ_LENGTH=2048
+NUM_CALIBRATION_SAMPLES=128
 GPU=0
 
 # ==================== 环境检查 ====================
 echo "=========================================="
 echo "AWQ 量化 - Qwen3-VL 多模态模型"
-echo "参考: https://docs.vllm.ai/en/latest/features/quantization/auto_awq.html"
+echo "参考: https://github.com/Junfeng-Pan/Qwen3-AWQ"
 echo "=========================================="
 
 # 检查 conda 环境
@@ -36,7 +38,7 @@ nvidia-smi -i $GPU --query-gpu=name,memory.total --format=csv,noheader 2>/dev/nu
 # ==================== 量化方式选择 ====================
 echo ""
 echo "选择量化方式:"
-echo "  1) llmcompressor（推荐，官方支持 Qwen3-VL）"
+echo "  1) llmcompressor（推荐，参考 Junfeng-Pan/Qwen3-AWQ）"
 echo "  2) AutoAWQ（实验性，Qwen3-VL 可能不兼容）"
 read -p "请输入选择 [1/2]: " CHOICE
 
@@ -63,6 +65,8 @@ case $CHOICE in
             --dataset $DATASET_PATH \
             --bits $BITS \
             --group_size $GROUP_SIZE \
+            --max_seq_length $MAX_SEQ_LENGTH \
+            --num_calibration_samples $NUM_CALIBRATION_SAMPLES \
             --copy_config \
             --official_model $OFFICIAL_MODEL
         ;;

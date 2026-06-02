@@ -4,38 +4,18 @@
 
 ## 一句话总结
 
-> **AWQ 通过保护重要权重通道，实现高精度 4-bit 量化。推荐用于 Qwen2-VL/Qwen2.5-VL，Qwen3-VL 推荐使用 GPTQ。**
+> **使用 llmcompressor 进行 AWQ 量化，视觉编码器保持 FP16，仅量化语言模型部分。**
 
 ---
 
-## ⚠️ 重要说明
+## 参考实现
 
-### Qwen3-VL 量化方案选择
+本方案参考 [Junfeng-Pan/Qwen3-AWQ](https://github.com/Junfeng-Pan/Qwen3-AWQ) 实现，使用 `llmcompressor` 进行 Qwen3-VL 多模态模型的 AWQ 量化。
 
-| 模型 | 推荐方案 | 原因 |
-|------|----------|------|
-| **Qwen3-VL** | **GPTQ** | GPTQModel 原生支持，同时量化 LLM + ViT |
-| **Qwen3-VL** | BnB NF4 | 最简单，仅量化 LLM |
-| **Qwen3-VL** | AWQ (llmcompressor) | 可用，但仅量化 LLM |
-| **Qwen2-VL** | AWQ (AutoAWQ) | AutoAWQ 原生支持 |
-| **Qwen2.5-VL** | AWQ (AutoAWQ) | AutoAWQ 原生支持 |
-
-### AutoAWQ 已被官方弃用
-
-- **AutoAWQ 已停止维护**，最后测试配置：Torch 2.6.0 + Transformers 4.51.3
-- **推荐替代方案**：[llmcompressor](https://github.com/vllm-project/llm-compressor) 或 [GPTQModel](https://github.com/ModelCloud/GPTQModel)
-- **Qwen3-VL 量化**：请使用 `quantize_gptq.py`（GPTQModel）
-
-### AutoAWQ 官方支持的多模态模型
-
-| 模型 | 状态 |
-|------|------|
-| Qwen2-VL | ✅ 官方支持 |
-| Qwen2.5-VL | ✅ 官方支持 |
-| Qwen2.5-Omni | ✅ 官方支持 |
-| LLaVA / LLaVA-Next | ✅ 官方支持 |
-| Phi3-V | ✅ 官方支持 |
-| **Qwen3-VL** | ❌ **不支持**（架构不同，有 DeepStack 特性） |
+**量化效果（Qwen3-VL-8B-Instruct）：**
+- 模型大小：~16.5 GB → **6.8 GB**（减少 59%）
+- 显存占用：>16 GB → **~7.5 GB**
+- OCRBench 准确率：**87.4%**（保持良好）
 
 ---
 
@@ -45,9 +25,9 @@
 # 1. 环境准备
 conda create -n awq python=3.10 -y
 conda activate awq
-pip install llmcompressor ms-swift
+pip install llmcompressor==0.9.0 transformers>=4.57.0
 
-# 2. 量化（使用 llmcompressor）
+# 2. 量化
 bash run.sh
 
 # 3. 验证
@@ -58,12 +38,59 @@ python verify.py --model /path/to/output
 
 ## 文件说明
 
-| 文件 | 用途 | 推荐度 |
-|------|------|--------|
-| `quantize_awq.py` | llmcompressor 量化（支持多模态） | ⭐⭐⭐ 推荐 |
-| `quantize_autoawq.py` | AutoAWQ 量化（仅支持 Qwen2-VL/Qwen2.5-VL） | ⚠️ 实验性 |
-| `run.sh` | 一键启动脚本（默认使用 llmcompressor） | - |
-| `run_llmcompressor.sh` | llmcompressor 直接启动脚本 | - |
+| 文件 | 用途 |
+|------|------|
+| `quantize_awq.py` | llmcompressor 量化脚本（推荐） |
+| `quantize_autoawq.py` | AutoAWQ 量化脚本（实验性，不推荐） |
+| `run.sh` | 一键启动脚本 |
+| `run_llmcompressor.sh` | llmcompressor 直接启动脚本 |
+
+---
+
+## 量化原理
+
+### Qwen3-VL 模型结构
+
+```
+Qwen3-VL-4B-Instruct
+├── 语言模型 (LLM)      → AWQ 4-bit 量化 ✅
+├── 视觉编码器 (ViT)    → FP16 保持（不量化）⚠️
+└── Projection 层       → AWQ 4-bit 量化 ✅
+```
+
+### 关键设计
+
+1. **视觉编码器保护**：通过 `ignore=["re:model[.]visual.*"]` 将视觉塔排除在量化之外
+2. **手动层级映射**：Qwen3-VL 有 `q_norm`/`k_norm` 等特殊层，需要手动配置 `AWQMapping`
+3. **Processor 代替 Tokenizer**：多模态模型需要使用 `AutoProcessor`
+
+### AWQ 层级映射配置
+
+```python
+mappings = [
+    AWQMapping(
+        smooth_layer="re:.*input_layernorm",
+        balance_layers=["re:.*q_proj", "re:.*k_proj", "re:.*v_proj"],
+    ),
+    AWQMapping(
+        smooth_layer="re:.*post_attention_layernorm",
+        balance_layers=["re:.*gate_proj", "re:.*up_proj"],
+    ),
+    AWQMapping(
+        smooth_layer="re:.*up_proj",
+        balance_layers=["re:.*down_proj"],
+    ),
+]
+
+ignore = [
+    "re:.*embed_tokens",
+    "re:model[.]visual.*",  # 忽略视觉塔
+    "re:visual.*",
+    "lm_head",
+    "re:.*q_norm",  # 忽略 attention 内部的 norm
+    "re:.*k_norm",
+]
+```
 
 ---
 
@@ -75,11 +102,22 @@ python verify.py --model /path/to/output
 | `--output` | （必填） | 输出模型路径 |
 | `--bits` | 4 | 量化位数（3/4） |
 | `--group_size` | 128 | 分组大小 |
-| `--dataset` | None | 校准数据集路径 |
+| `--dataset` | （必填） | 校准数据集 JSONL 路径 |
+| `--max_seq_length` | 2048 | 最大序列长度 |
+| `--num_calibration_samples` | 128 | 校准样本数量 |
 
 ---
 
-## Qwen3-VL 量化（使用 llmcompressor）
+## 使用方法
+
+### 方法 1：使用运行脚本（推荐）
+
+```bash
+cd hys_quantify/AWQ
+bash run.sh
+```
+
+### 方法 2：直接运行
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 python quantize_awq.py \
@@ -87,52 +125,35 @@ CUDA_VISIBLE_DEVICES=0 python quantize_awq.py \
     --output /path/to/Qwen3-VL-4B-AWQ \
     --bits 4 \
     --group_size 128 \
+    --max_seq_length 2048 \
+    --num_calibration_samples 128 \
     --dataset /path/to/calibration.jsonl \
     --copy_config \
     --official_model /path/to/Qwen3-VL-4B-Instruct
 ```
 
-### 量化策略
+---
 
-```
-Qwen3-VL 结构（使用 llmcompressor）：
-├── 语言模型 (LLM)      → AWQ 4-bit 量化
-├── 视觉编码器 (ViT)    → FP16 保持（忽略）
-└── Projection 层       → AWQ 4-bit 量化
+## 校准数据集格式
 
-注意：AWQ 不量化视觉编码器，如需同时量化 LLM + ViT，请使用 GPTQ
+JSONL 格式，支持多种字段名：
+
+```json
+{"query": "描述这张图片", "response": "这是一张..."}
+{"messages": [{"role": "user", "content": "描述这张图片"}, {"role": "assistant", "content": "这是一张..."}]}
+{"text": "一段文本内容"}
 ```
 
 ---
 
-## Qwen2-VL 量化（使用 AutoAWQ）
+## 依赖项
 
-```python
-from awq import AutoAWQForCausalLM
-from transformers import AutoTokenizer
-
-model_path = 'Qwen/Qwen2-VL-7B-Instruct'
-quant_path = 'Qwen2-VL-7B-Instruct-awq'
-quant_config = { "zero_point": True, "q_group_size": 128, "w_bit": 4, "version": "GEMM" }
-
-model = AutoAWQForCausalLM.from_pretrained(model_path)
-tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
-
-model.quantize(tokenizer, quant_config=quant_config)
-model.save_quantized(quant_path)
-tokenizer.save_pretrained(quant_path)
 ```
-
----
-
-## 性能指标
-
-| 指标 | FP16 | AWQ 4-bit |
-|------|------|-----------|
-| 模型大小 | 4 GB | 1 GB |
-| 显存占用 | 8 GB | 2 GB |
-| 推理速度 | 20 tok/s | 50 tok/s |
-| 精度损失 | - | < 1% |
+llmcompressor==0.9.0
+transformers>=4.57.0
+accelerate>=1.12.0
+torch>=2.7.0
+```
 
 ---
 
@@ -141,52 +162,48 @@ tokenizer.save_pretrained(quant_path)
 ### vLLM（推荐）
 
 ```bash
-vllm serve /path/to/model-awq \
+vllm serve /path/to/Qwen3-VL-4B-AWQ \
     --quantization awq \
     --dtype half \
     --max-model-len 8192 \
-    --port 7890
+    --port 7890 \
+    --api-key abc123
 ```
 
 ### transformers
 
 ```python
-from transformers import Qwen3VLForConditionalGeneration, AutoProcessor
+from transformers import AutoModelForVision2Seq, AutoProcessor
 
-# Qwen3-VL 加载
-model = Qwen3VLForConditionalGeneration.from_pretrained(
-    "/path/to/model-awq",
+model = AutoModelForVision2Seq.from_pretrained(
+    "/path/to/Qwen3-VL-4B-AWQ",
     device_map="auto",
     trust_remote_code=True,
 )
-processor = AutoProcessor.from_pretrained("/path/to/model-awq", trust_remote_code=True)
+processor = AutoProcessor.from_pretrained("/path/to/Qwen3-VL-4B-AWQ", trust_remote_code=True)
 ```
 
 ---
 
 ## 常见问题
 
-**Q: Qwen3-VL 应该用 AWQ 还是 GPTQ？**
-A: 推荐 GPTQ。GPTQModel 原生支持 Qwen3-VL，同时量化 LLM + ViT。AWQ 仅量化 LLM。
+**Q: 为什么视觉编码器不量化？**
+A: 视觉编码器对量化敏感，且参数量占比相对较小。保持 FP16 可以保护多模态理解能力。
 
-**Q: AutoAWQ 支持 Qwen3-VL 吗？**
-A: 不支持。AutoAWQ 仅支持 Qwen2-VL/Qwen2.5-VL，且已被弃用。
+**Q: 为什么需要手动配置 AWQMapping？**
+A: Qwen3-VL 是较新架构，自动推断层级关系会失败。且 Qwen3-VL 有 `q_norm`/`k_norm` 等特殊层。
 
-**Q: 为什么 AutoAWQ 不支持 Qwen3-VL？**
-A: Qwen3-VL 有 DeepStack 特性（融合 ViT 第 5、11、17 层特征），架构与 Qwen2-VL 不同。AutoAWQ 已停止维护，不会添加新模型支持。
+**Q: 与 GPTQ 相比有什么优劣？**
+A: AWQ 仅量化 LLM，GPTQ 同时量化 LLM + ViT。如需完整多模态量化，推荐 GPTQ。
 
-**Q: 如何加载 AWQ 量化后的 Qwen3-VL？**
-A: 使用专用类：
-```python
-from transformers import Qwen3VLForConditionalGeneration
-model = Qwen3VLForConditionalGeneration.from_pretrained("/path/to/model-awq")
-```
+**Q: 显存不足怎么办？**
+A: 减少 `--num_calibration_samples` 或 `--max_seq_length`
 
 ---
 
 ## 相关链接
 
+- [Junfeng-Pan/Qwen3-AWQ（参考实现）](https://github.com/Junfeng-Pan/Qwen3-AWQ)
+- [llmcompressor](https://github.com/vllm-project/llm-compressor)
 - [Qwen3-VL-4B-Instruct](https://www.modelscope.cn/models/Qwen/Qwen3-VL-4B-Instruct)
-- [AutoAWQ（已弃用）](https://github.com/casper-hansen/AutoAWQ)
-- [llmcompressor（推荐）](https://github.com/vllm-project/llm-compressor)
-- [GPTQModel（推荐 Qwen3-VL）](https://github.com/ModelCloud/GPTQModel)
+- [vLLM 文档](https://docs.vllm.ai/)
