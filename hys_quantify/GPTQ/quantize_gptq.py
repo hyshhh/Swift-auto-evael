@@ -260,12 +260,31 @@ def quantize_model(args):
 
     # 步骤 2: 加载模型
     print('步骤 2: 加载模型...')
+    # 修补模型 config.json 中的 torch_dtype，避免 gptqmodel 的 auto_dtype 报错
+    # （gptqmodel 内部自行加载 config，不接受 "auto" 字符串，必须是 torch.dtype）
+    import torch
+    config_json_path = Path(model_path) / 'config.json'
+    config_modified = False
+    with open(config_json_path, 'r', encoding='utf-8') as f:
+        config_dict = json.load(f)
+    if config_dict.get('torch_dtype') == 'auto':
+        config_dict['torch_dtype'] = 'bfloat16'
+        with open(config_json_path, 'w', encoding='utf-8') as f:
+            json.dump(config_dict, f, indent=2, ensure_ascii=False)
+        config_modified = True
+        print('  ⚠ config.json 中 torch_dtype 为 "auto"，已临时修改为 "bfloat16"')
     model = GPTQModel.from_pretrained(
         str(model_path),
         quantize_config=quant_config,
-        torch_dtype="auto",
+        torch_dtype=torch.bfloat16,
         trust_remote_code=True,
     )
+    # 恢复原始 config.json
+    if config_modified:
+        config_dict['torch_dtype'] = 'auto'
+        with open(config_json_path, 'w', encoding='utf-8') as f:
+            json.dump(config_dict, f, indent=2, ensure_ascii=False)
+        print('  ✓ 已恢复 config.json 中的 torch_dtype 为 "auto"')
 
     # 打印模型结构
     print('\n模型结构:')
