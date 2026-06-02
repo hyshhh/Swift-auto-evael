@@ -13,7 +13,7 @@ OUTPUT_PATH="/media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b-bnb-nf4"
 BITS=4
 DOUBLE_QUANT=true
 COMPUTE_DTYPE="bfloat16"
-MAX_SHARD_SIZE="5GB"  # 每个分片最大大小（避免单文件过大）
+MAX_SHARD_SIZE="1GB"  # 每个分片最大大小（2B 模型约 1-2GB）
 SAVE_MERGED=false     # 是否保存合并模型（会变大）
 
 # ==================== 环境检查 ====================

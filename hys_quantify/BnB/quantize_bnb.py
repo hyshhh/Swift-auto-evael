@@ -60,7 +60,7 @@ def parse_args():
                        choices=["float16", "bfloat16", "float32"], help="计算精度")
     parser.add_argument("--save_merged", action="store_true", help="保存合并后的模型（不含量化配置）")
     parser.add_argument("--push_to_hub", type=str, default=None, help="推送到 HuggingFace Hub")
-    parser.add_argument("--max_shard_size", type=str, default="5GB", help="每个分片最大大小")
+    parser.add_argument("--max_shard_size", type=str, default="1GB", help="每个分片最大大小")
     parser.add_argument("--use_safetensors", action="store_true", default=True, help="使用 safetensors 格式（推荐）")
     return parser.parse_args()
 
@@ -225,6 +225,12 @@ def main():
     if has_processor and processor is not None:
         processor.save_pretrained(args.output)
         print("  ✓ Processor 保存完成")
+
+    # 显示保存的文件列表
+    print("\n  保存的文件:")
+    for f in sorted(os.listdir(args.output)):
+        size = os.path.getsize(os.path.join(args.output, f)) / (1024 * 1024)
+        print(f"    {f}: {size:.2f} MB")
 
     # 如果需要保存合并模型（不含量化配置，用于部署）
     if args.save_merged:
