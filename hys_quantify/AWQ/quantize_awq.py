@@ -199,15 +199,43 @@ def quantize_model(args):
     from transformers import AutoProcessor
 
     if model_type in ('qwen3_vl', 'qwen2_vl', 'multimodal'):
-        # 多模态模型使用 AutoModelForVision2Seq
-        from transformers import AutoModelForVision2Seq
-        print(f'使用 AutoModelForVision2Seq 加载多模态模型...')
-        model = AutoModelForVision2Seq.from_pretrained(
-            str(model_path),
-            torch_dtype="auto",
-            device_map="auto",
-            trust_remote_code=True,
-        )
+        # 多模态模型使用 AutoModelForVision2Seq（需要 transformers >= 4.57.0）
+        print(f'加载多模态模型...')
+        try:
+            from transformers import AutoModelForVision2Seq
+            model = AutoModelForVision2Seq.from_pretrained(
+                str(model_path),
+                torch_dtype="auto",
+                device_map="auto",
+                trust_remote_code=True,
+            )
+        except ImportError:
+            # 回退：使用专用模型类
+            print('  AutoModelForVision2Seq 不可用，尝试使用专用模型类...')
+            if model_type == 'qwen3_vl':
+                from transformers import Qwen3VLForConditionalGeneration
+                model = Qwen3VLForConditionalGeneration.from_pretrained(
+                    str(model_path),
+                    torch_dtype="auto",
+                    device_map="auto",
+                    trust_remote_code=True,
+                )
+            elif model_type == 'qwen2_vl':
+                from transformers import Qwen2VLForConditionalGeneration
+                model = Qwen2VLForConditionalGeneration.from_pretrained(
+                    str(model_path),
+                    torch_dtype="auto",
+                    device_map="auto",
+                    trust_remote_code=True,
+                )
+            else:
+                from transformers import AutoModel
+                model = AutoModel.from_pretrained(
+                    str(model_path),
+                    torch_dtype="auto",
+                    device_map="auto",
+                    trust_remote_code=True,
+                )
         processor = AutoProcessor.from_pretrained(str(model_path), trust_remote_code=True)
         print('✓ 多模态模型加载完成')
     else:
