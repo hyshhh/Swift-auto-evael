@@ -219,7 +219,6 @@ def quantize_model(args):
         print(f'使用 GPU: {args.gpu}')
 
     from gptqmodel import GPTQModel
-    from gptqmodel.quantization import GPTQConfig
     from transformers import AutoTokenizer
 
     print('=' * 60)
@@ -247,17 +246,17 @@ def quantize_model(args):
     print(f'阻尼系数: {args.damp_percent}')
     print(f'量化 lm_head: {args.lm_head}')
 
-    # 步骤 1: 创建量化配置
+    # 步骤 1: 创建量化配置（使用字典格式）
     print('\n步骤 1: 创建量化配置...')
-    quant_config = GPTQConfig(
-        bits=args.bits,
-        group_size=args.group_size,
-        sym=args.sym,
-        desc_act=args.desc_act,
-        true_sequential=args.true_sequential,
-        damp_percent=args.damp_percent,
-        lm_head=args.lm_head,
-    )
+    quant_config = {
+        'bits': args.bits,
+        'group_size': args.group_size,
+        'sym': args.sym,
+        'desc_act': args.desc_act,
+        'true_sequential': args.true_sequential,
+        'damp_percent': args.damp_percent,
+        'lm_head': args.lm_head,
+    }
 
     # 步骤 2: 加载模型
     print('步骤 2: 加载模型...')
