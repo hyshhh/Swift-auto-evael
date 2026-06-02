@@ -24,7 +24,6 @@ from transformers import (
     AutoProcessor,
     BitsAndBytesConfig,
 )
-from peft import prepare_model_for_kbit_training
 
 
 def detect_model_type(model_path):
@@ -237,44 +236,58 @@ def main():
         processor = None
         print("  ⚠ 未检测到 Processor（非多模态模型）")
 
-    # 5. 准备模型用于训练（如果需要 QLoRA 微调）
-    print("\n[3/5] 准备模型...")
-    if args.bits == 4:
-        model = prepare_model_for_kbit_training(model)
+    # 5. 打印模型结构（注意：不要调用 prepare_model_for_kbit_training，会导致保存卡死）
+    print("\n[3/5] 分析模型结构...")
 
-    # 打印模型信息
-    print("\n模型结构:")
+    # 打印直接子模块
+    print("\n  直接子模块:")
     for name, module in model.named_children():
-        print(f"  - {name}: {type(module).__name__}")
+        print(f"    - {name}: {type(module).__name__}")
 
-    # 检查是否包含视觉编码器
-    has_visual = hasattr(model, 'visual') or any('visual' in name for name, _ in model.named_children())
+    # 使用 named_modules() 递归检测视觉编码器（named_children() 只看一层，会漏掉 model.visual）
+    has_visual = False
+    visual_modules = []
+    for name, module in model.named_modules():
+        if 'visual' in name.lower() and name:  # name 非空且包含 visual
+            has_visual = True
+            visual_modules.append(name)
+
     if has_visual:
-        print("  ✓ 包含视觉编码器（多模态模型）")
+        print(f"\n  ✓ 检测到视觉编码器（多模态模型）: {visual_modules[:5]}...")
     else:
-        print("  ⚠ 未检测到视觉编码器（可能是纯文本模型）")
+        print("\n  ⚠ 未检测到视觉编码器（可能是纯文本模型）")
 
     # 打印量化信息
-    print("\n量化配置:")
-    print(f"  量化类型: {'NF4' if args.bits == 4 else 'INT8'}")
-    print(f"  计算精度: {args.compute_dtype}")
+    print("\n  量化配置:")
+    print(f"    量化类型: {'NF4' if args.bits == 4 else 'INT8'}")
+    print(f"    计算精度: {args.compute_dtype}")
     if args.bits == 4 and args.double_quant:
-        print("  双重量化: 已启用（约节省 0.4 bit/参数）")
+        print("    双重量化: 已启用（约节省 0.4 bit/参数）")
 
-    # 6. 保存模型
+    # 6. 保存模型（不调用 prepare_model_for_kbit_training，避免保存卡死）
     print(f"\n[4/5] 保存模型到 {args.output}...")
     print(f"  使用格式: {'safetensors' if args.use_safetensors else 'pytorch'}")
     print(f"  分片大小: {args.max_shard_size}")
     os.makedirs(args.output, exist_ok=True)
 
-    # 保存模型权重
-    print("  正在保存模型分片...")
-    model.save_pretrained(
-        args.output,
-        max_shard_size=args.max_shard_size,
-        safe_serialization=args.use_safetensors,
-    )
-    print("  ✓ 模型权重保存完成")
+    # 保存模型权重（BnB NF4 量化权重，体积约为 FP16 的 1/4）
+    print("  正在保存量化权重（可能需要几分钟，请耐心等待）...")
+    try:
+        model.save_pretrained(
+            args.output,
+            max_shard_size=args.max_shard_size,
+            safe_serialization=args.use_safetensors,
+        )
+        print("  ✓ 模型权重保存完成")
+    except Exception as e:
+        print(f"  ⚠ safetensors 保存失败: {e}")
+        print("  尝试使用 pytorch 格式保存...")
+        model.save_pretrained(
+            args.output,
+            max_shard_size=args.max_shard_size,
+            safe_serialization=False,
+        )
+        print("  ✓ 模型权重保存完成（pytorch 格式）")
 
     # 保存 tokenizer
     tokenizer.save_pretrained(args.output)
