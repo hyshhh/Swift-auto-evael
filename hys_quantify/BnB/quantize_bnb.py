@@ -7,6 +7,18 @@ BnB NF4 量化脚本 - 适配 Qwen3-VL 多模态模型
     vllm serve /path/to/model --quantization bitsandbytes --load-format bitsandbytes
 
 参考: https://docs.vllm.com.cn/en/latest/features/quantization/int4/
+
+Qwen3-VL 模型架构:
+    Qwen3VLForConditionalGeneration
+    ├── model (Qwen3VLModel)
+    │   ├── embed_tokens
+    │   ├── layers (x N)
+    │   ├── norm
+    │   └── visual (Qwen3VisionTransformer) ← 视觉编码器在这里
+    └── lm_head
+
+    注意: named_children() 只返回 model 和 lm_head，看不到 model.visual
+          必须用 named_modules() 递归搜索才能找到视觉编码器
 """
 
 import os
@@ -168,6 +180,7 @@ def main():
     print(f"  检测到模型类型: {model_type}")
 
     # 3. 加载模型（根据类型选择正确的加载方式）
+    # 注意：不要调用 prepare_model_for_kbit_training()，它会添加梯度钩子导致 save_pretrained 卡死
     if model_type == 'qwen3_vl':
         print("  使用 Qwen3 VL 多模态模型加载方式...")
         from transformers import Qwen3VLForConditionalGeneration
@@ -223,7 +236,7 @@ def main():
         use_fast=True,
     )
 
-    # Qwen3-VL 多模态模型有 processor（处理图像）
+    # Qwen3-VL 多模态模型有 processor（处理图像和视频）
     try:
         processor = AutoProcessor.from_pretrained(
             args.model,
@@ -236,24 +249,29 @@ def main():
         processor = None
         print("  ⚠ 未检测到 Processor（非多模态模型）")
 
-    # 5. 打印模型结构（注意：不要调用 prepare_model_for_kbit_training，会导致保存卡死）
+    # 5. 分析模型结构（不调用 prepare_model_for_kbit_training，避免保存卡死）
     print("\n[3/5] 分析模型结构...")
 
     # 打印直接子模块
-    print("\n  直接子模块:")
+    print("  直接子模块:")
     for name, module in model.named_children():
         print(f"    - {name}: {type(module).__name__}")
 
-    # 使用 named_modules() 递归检测视觉编码器（named_children() 只看一层，会漏掉 model.visual）
+    # 使用 named_modules() 递归检测视觉编码器
+    # Qwen3-VL 结构: model.visual 是视觉编码器，但 named_children() 只看一层
     has_visual = False
     visual_modules = []
     for name, module in model.named_modules():
         if 'visual' in name.lower() and name:  # name 非空且包含 visual
             has_visual = True
-            visual_modules.append(name)
+            visual_modules.append(f"{name} ({type(module).__name__})")
 
     if has_visual:
-        print(f"\n  ✓ 检测到视觉编码器（多模态模型）: {visual_modules[:5]}...")
+        print(f"\n  ✓ 检测到视觉编码器（多模态模型）:")
+        for vm in visual_modules[:5]:  # 最多显示 5 个
+            print(f"      {vm}")
+        if len(visual_modules) > 5:
+            print(f"      ... 共 {len(visual_modules)} 个视觉模块")
     else:
         print("\n  ⚠ 未检测到视觉编码器（可能是纯文本模型）")
 
@@ -264,7 +282,7 @@ def main():
     if args.bits == 4 and args.double_quant:
         print("    双重量化: 已启用（约节省 0.4 bit/参数）")
 
-    # 6. 保存模型（不调用 prepare_model_for_kbit_training，避免保存卡死）
+    # 6. 保存模型
     print(f"\n[4/5] 保存模型到 {args.output}...")
     print(f"  使用格式: {'safetensors' if args.use_safetensors else 'pytorch'}")
     print(f"  分片大小: {args.max_shard_size}")
