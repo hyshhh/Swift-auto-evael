@@ -8,9 +8,9 @@
 # ==================== 配置区域 ====================
 
 # 模型路径
-MERGED_MODEL="/media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b"
-OFFICIAL_MODEL="/media/ddc/新加卷/hys/hysnew/Qwen/Qwen3.5-2B"
-GPTQ_MODEL="/media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b-gptq"
+MERGED_MODEL="/media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-Instruct"
+OFFICIAL_MODEL="/media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-Instruct"
+GPTQ_MODEL="/media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-GPTQ"
 
 # 量化参数
 QUANT_BITS=4
@@ -62,8 +62,8 @@ echo ""
 echo "使用 vLLM 加载量化模型:"
 echo "  vllm serve $GPTQ_MODEL \\"
 echo "      --api-key abc123 \\"
-echo "      --served-model-name Qwen/Qwen3.5-2B-GPTQ \\"
-echo "      --max-model-len 8192 \\"
+echo "      --served-model-name Qwen/Qwen3-VL-4B-GPTQ \\"
+echo "      --max-model-len 10240 \\"
 echo "      --port 7890 \\"
 echo "      --quantization gptq"
 echo "=========================================="
