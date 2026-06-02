@@ -287,13 +287,18 @@ def quantize_model(args):
 
     # 步骤 4: 执行量化
     print('步骤 4: 执行量化...')
-    quantize_kwargs = {
-        'batch_size': args.batch_size,
-    }
-    if calib_data:
-        quantize_kwargs['calibration_data'] = calib_data
 
-    model.quantize(**quantize_kwargs)
+    # 提取纯文本列表（新版 gptqmodel 只接受文本列表）
+    if calib_data and isinstance(calib_data[0], dict):
+        calib_texts = [item['text'] for item in calib_data if 'text' in item]
+    else:
+        calib_texts = calib_data if calib_data else []
+
+    # 新版 gptqmodel 量化方式
+    if calib_texts:
+        model.quantize(calibration_dataset=calib_texts)
+    else:
+        model.quantize()
 
     # 步骤 5: 保存量化模型
     print('步骤 5: 保存量化模型...')
