@@ -42,7 +42,10 @@ pip install ms-swift gptqmodel optimum accelerate
 ```bash
 conda create -n llmpress python=3.10 -y
 conda activate llmpress
-pip install autoawq ms-swift
+pip install llmcompressor ms-swift
+
+# 如需使用 AutoAWQ（仅支持 Qwen2-VL/Qwen2.5-VL，不支持 Qwen3-VL）
+pip install autoawq
 ```
 
 ---
@@ -65,13 +68,15 @@ cd GPTQ
 bash run_gptq.sh
 ```
 
-### AWQ 量化
+### AWQ 量化（Qwen3-VL 推荐）
 
 ```bash
 conda activate llmpress
 cd AWQ
 bash run.sh
 ```
+
+> **注意**：Qwen3-VL 请使用 llmcompressor（默认选项），AutoAWQ 不支持 Qwen3-VL。
 
 ---
 

@@ -36,24 +36,14 @@ nvidia-smi -i $GPU --query-gpu=name,memory.total --format=csv,noheader 2>/dev/nu
 # ==================== 量化方式选择 ====================
 echo ""
 echo "选择量化方式:"
-echo "  1) AutoAWQ（推荐，vLLM 原生支持）"
-echo "  2) llmcompressor"
+echo "  1) llmcompressor（推荐，官方支持 Qwen3-VL）"
+echo "  2) AutoAWQ（实验性，Qwen3-VL 可能不兼容）"
 read -p "请输入选择 [1/2]: " CHOICE
 
 case $CHOICE in
     2)
-        echo "使用 llmcompressor 量化..."
-        CUDA_VISIBLE_DEVICES=$GPU python quantize_awq.py \
-            --model $MERGED_MODEL \
-            --output $AWQ_MODEL \
-            --dataset $DATASET_PATH \
-            --bits $BITS \
-            --group_size $GROUP_SIZE \
-            --copy_config \
-            --official_model $OFFICIAL_MODEL
-        ;;
-    *)
-        echo "使用 AutoAWQ 量化..."
+        echo "使用 AutoAWQ 量化（实验性）..."
+        echo "注意: AutoAWQ 已被官方弃用，Qwen3-VL 支持为实验性功能"
         python quantize_autoawq.py \
             --model $MERGED_MODEL \
             --output $AWQ_MODEL \
@@ -64,6 +54,17 @@ case $CHOICE in
             --copy_config \
             --official_model $OFFICIAL_MODEL \
             --gpu $GPU
+        ;;
+    *)
+        echo "使用 llmcompressor 量化..."
+        CUDA_VISIBLE_DEVICES=$GPU python quantize_awq.py \
+            --model $MERGED_MODEL \
+            --output $AWQ_MODEL \
+            --dataset $DATASET_PATH \
+            --bits $BITS \
+            --group_size $GROUP_SIZE \
+            --copy_config \
+            --official_model $OFFICIAL_MODEL
         ;;
 esac
 

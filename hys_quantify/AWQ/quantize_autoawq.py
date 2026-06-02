@@ -167,24 +167,34 @@ def patch_qwen35_awq_get_layers_for_scaling(awq_model):
     Qwen3AWQForCausalLM.get_layers_for_scaling = patched_get_layers_for_scaling
     print(f"patched get_layers_for_scaling with attr: {attn_attr}")
 def patch_qwen3vl_awq_support():
-    """为 AutoAWQ 注册 Qwen3-VL 多模态模型支持"""
+    """
+    为 AutoAWQ 注册 Qwen3-VL 多模态模型支持（实验性）
+
+    注意：
+    - AutoAWQ 官方不支持 Qwen3-VL，此为实验性补丁
+    - AutoAWQ 已被官方弃用，推荐使用 llmcompressor 量化 Qwen3-VL
+    - 参考：https://github.com/casper-hansen/AutoAWQ
+    """
     try:
         from awq.models.auto import AWQ_CAUSAL_LM_MODEL_MAP
         from awq.models.base import TRANSFORMERS_AUTO_MAPPING_DICT
-        from awq.models.qwen2 import Qwen2AWQForCausalLM
+        from awq.models.qwen2_vl import Qwen2VLAWQForCausalLM
 
-        # Qwen3-VL 的语言模型部分与 Qwen2 结构兼容
+        # Qwen3-VL 尝试复用 Qwen2-VL 处理器（实验性，可能不兼容）
         if "qwen3_vl" not in AWQ_CAUSAL_LM_MODEL_MAP:
-            AWQ_CAUSAL_LM_MODEL_MAP["qwen3_vl"] = Qwen2AWQForCausalLM
-            TRANSFORMERS_AUTO_MAPPING_DICT["qwen3_vl"] = "AutoModelForCausalLM"
-            print('已注册 qwen3_vl 到 AutoAWQ（复用 Qwen2 处理器）')
+            AWQ_CAUSAL_LM_MODEL_MAP["qwen3_vl"] = Qwen2VLAWQForCausalLM
+            TRANSFORMERS_AUTO_MAPPING_DICT["qwen3_vl"] = "AutoModelForVision2Seq"
+            print('⚠ 已注册 qwen3_vl 到 AutoAWQ（实验性，复用 Qwen2-VL 处理器）')
+            print('  如果量化失败，请使用 llmcompressor 方式: python quantize_awq.py')
 
+        # Qwen2-VL 已有官方支持，确保注册
         if "qwen2_vl" not in AWQ_CAUSAL_LM_MODEL_MAP:
-            AWQ_CAUSAL_LM_MODEL_MAP["qwen2_vl"] = Qwen2AWQForCausalLM
-            TRANSFORMERS_AUTO_MAPPING_DICT["qwen2_vl"] = "AutoModelForCausalLM"
-            print('已注册 qwen2_vl 到 AutoAWQ（复用 Qwen2 处理器）')
+            AWQ_CAUSAL_LM_MODEL_MAP["qwen2_vl"] = Qwen2VLAWQForCausalLM
+            TRANSFORMERS_AUTO_MAPPING_DICT["qwen2_vl"] = "AutoModelForVision2Seq"
+            print('已注册 qwen2_vl 到 AutoAWQ')
     except Exception as e:
         print(f'注册 Qwen3-VL AWQ 支持时出错: {e}')
+        print('建议使用 llmcompressor 方式量化 Qwen3-VL')
 
 
 def quantize_model(args):
@@ -202,6 +212,12 @@ def quantize_model(args):
     # 根据模型类型进行补丁和注册
     if model_type in ('qwen3_vl', 'qwen2_vl', 'multimodal'):
         patch_qwen3vl_awq_support()
+        if model_type == 'qwen3_vl':
+            print('')
+            print('⚠ 警告: Qwen3-VL 使用 AutoAWQ 量化为实验性功能')
+            print('  AutoAWQ 官方不支持 Qwen3-VL，推荐使用 llmcompressor:')
+            print('  python quantize_awq.py --model ... --output ...')
+            print('')
     elif model_type == 'qwen3_5':
         patch_qwen35_init_use_cache()
         # AutoAWQ 不认识 qwen3_5，monkey-patch 注册复用 Qwen3 处理器

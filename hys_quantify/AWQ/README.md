@@ -8,15 +8,36 @@
 
 ---
 
+## ⚠️ 重要说明
+
+### AutoAWQ 已被官方弃用
+
+- **AutoAWQ 已停止维护**，最后测试配置：Torch 2.6.0 + Transformers 4.51.3
+- **推荐替代方案**：[llmcompressor](https://github.com/vllm-project/llm-compressor)（vLLM 项目接管）
+- **Qwen3-VL 量化**：请使用 `quantize_awq.py`（llmcompressor），不要使用 `quantize_autoawq.py`
+
+### AutoAWQ 官方支持的多模态模型
+
+| 模型 | 状态 |
+|------|------|
+| Qwen2-VL | ✅ 官方支持 |
+| Qwen2.5-VL | ✅ 官方支持 |
+| Qwen2.5-Omni | ✅ 官方支持 |
+| LLaVA / LLaVA-Next | ✅ 官方支持 |
+| Phi3-V | ✅ 官方支持 |
+| **Qwen3-VL** | ❌ **不支持**（实验性补丁可用） |
+
+---
+
 ## 快速开始
 
 ```bash
 # 1. 环境准备
 conda create -n awq python=3.10 -y
 conda activate awq
-pip install autoawq ms-swift
+pip install llmcompressor ms-swift
 
-# 2. 量化
+# 2. 量化（使用 llmcompressor，推荐）
 bash run.sh
 
 # 3. 验证
@@ -27,12 +48,12 @@ python verify.py --model /path/to/output
 
 ## 文件说明
 
-| 文件 | 用途 |
-|------|------|
-| `quantize_autoawq.py` | 使用 AutoAWQ 量化（推荐，vLLM 原生支持） |
-| `quantize_awq.py` | 使用 llmcompressor 量化（支持多模态） |
-| `run.sh` | 一键启动脚本（支持选择量化方式） |
-| `run_llmcompressor.sh` | llmcompressor 直接启动脚本 |
+| 文件 | 用途 | 推荐度 |
+|------|------|--------|
+| `quantize_awq.py` | llmcompressor 量化（支持 Qwen3-VL） | ⭐⭐⭐ 推荐 |
+| `quantize_autoawq.py` | AutoAWQ 量化（仅支持 Qwen2-VL/Qwen2.5-VL） | ⚠️ 实验性 |
+| `run.sh` | 一键启动脚本（默认使用 llmcompressor） | - |
+| `run_llmcompressor.sh` | llmcompressor 直接启动脚本 | - |
 
 ---
 
@@ -45,30 +66,32 @@ python verify.py --model /path/to/output
 | `--bits` | 4 | 量化位数（3/4） |
 | `--group_size` | 128 | 分组大小 |
 | `--dataset` | None | 校准数据集路径 |
-| `--version` | GEMM | 量化内核版本（GEMM/GEMV/Marlin） |
 
 ---
 
-## 多模态支持（Qwen3-VL）
+## Qwen3-VL 量化（推荐方式）
 
-AWQ 支持 Qwen3-VL 多模态模型量化：
+使用 llmcompressor 量化 Qwen3-VL：
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python quantize_awq.py \
+    --model /path/to/Qwen3-VL-4B-Instruct \
+    --output /path/to/Qwen3-VL-4B-AWQ \
+    --bits 4 \
+    --group_size 128 \
+    --dataset /path/to/calibration.jsonl \
+    --copy_config \
+    --official_model /path/to/Qwen3-VL-4B-Instruct
+```
+
+### 量化策略
 
 ```
 Qwen3-VL 结构：
 ├── 语言模型 (LLM)      → AWQ 4-bit 量化
-├── 视觉编码器 (ViT)    → FP16 保持（llmcompressor）或 AWQ 量化（AutoAWQ）
+├── 视觉编码器 (ViT)    → FP16 保持（llmcompressor 自动处理）
 └── Projection 层       → AWQ 4-bit 量化
 ```
-
-### 两种量化方式对比
-
-| 特性 | AutoAWQ | llmcompressor |
-|------|---------|---------------|
-| 推荐度 | ⭐⭐⭐ 推荐 | ⭐⭐ 备选 |
-| vLLM 兼容 | ✅ 原生支持 | ✅ 支持 |
-| 多模态支持 | ✅ 支持 | ✅ 支持 |
-| 量化速度 | ⚡ 快 | 中等 |
-| 依赖 | `autoawq` | `llmcompressor` |
 
 ---
 
@@ -76,8 +99,8 @@ Qwen3-VL 结构：
 
 | 指标 | FP16 | AWQ 4-bit |
 |------|------|-----------|
-| 模型大小 | 4 GB | 1 GB |
-| 显存占用 | 8 GB | 2 GB |
+| 模型大小 | 8 GB | 2 GB |
+| 显存占用 | 16 GB | 4 GB |
 | 推理速度 | 20 tok/s | 50 tok/s |
 | 精度损失 | - | < 1% |
 
@@ -132,8 +155,11 @@ tokenizer = AutoTokenizer.from_pretrained("/path/to/model-awq", trust_remote_cod
 
 ## 常见问题
 
-**Q: 报错 `qwen3_5 isn't supported yet`**
-A: 升级 autoawq: `pip install autoawq>=0.2.9`
+**Q: Qwen3-VL 应该用哪个脚本？**
+A: 使用 `quantize_awq.py`（llmcompressor），不要使用 `quantize_autoawq.py`
+
+**Q: AutoAWQ 还能用吗？**
+A: 对于 Qwen2-VL/Qwen2.5-VL 可以使用，但已停止维护。推荐迁移到 llmcompressor
 
 **Q: 报错 `No module named 'awq'`**
 A: 安装 autoawq: `pip install autoawq`
@@ -141,22 +167,19 @@ A: 安装 autoawq: `pip install autoawq`
 **Q: 显存不足**
 A: 减小 `--group_size`（如 64）或减少校准数据
 
-**Q: 量化后模型无法加载**
-A: 检查是否正确复制了配置文件，使用 `--copy_config --official_model` 参数
-
 **Q: vLLM 加载时报错**
-A: 确保使用 `--quantization awq` 参数，或检查 config.json 中是否包含 `quantization_config`
+A: 确保使用 `--quantization awq` 参数
 
 ---
 
 ## 环境依赖
 
 ```bash
-# 基础依赖
-pip install autoawq ms-swift
+# 推荐（llmcompressor）
+pip install llmcompressor ms-swift
 
-# 如遇编译问题
-pip install autoawq --no-build-isolation
+# 备选（AutoAWQ，仅支持 Qwen2-VL/Qwen2.5-VL）
+pip install autoawq ms-swift
 
 # vLLM 推理
 pip install vllm
@@ -167,6 +190,6 @@ pip install vllm
 ## 相关链接
 
 - [AWQ 论文](https://arxiv.org/abs/2306.00978)
-- [AutoAWQ](https://github.com/casper-hansen/AutoAWQ)
+- [AutoAWQ（已弃用）](https://github.com/casper-hansen/AutoAWQ)
+- [llmcompressor（推荐）](https://github.com/vllm-project/llm-compressor)
 - [vLLM AutoAWQ 文档](https://docs.vllm.ai/en/latest/features/quantization/auto_awq.html)
-- [llmcompressor](https://github.com/neuralmagic/llmcompressor)
