@@ -133,6 +133,7 @@ def parse_args():
     parser.add_argument("--use_safetensors", action="store_true", default=True, help="使用 safetensors 格式（推荐）")
     parser.add_argument("--copy_config", action="store_true", help="从官方模型复制配置文件")
     parser.add_argument("--official_model", type=str, default=None, help="官方模型路径（用于复制配置）")
+    parser.add_argument("--gpu", type=str, default=None, help="指定 GPU，如 '0' 或 '1'（推荐用大显存卡，如 A6000）")
     parser.add_argument("--push_to_hub", type=str, default=None, help="推送到 HuggingFace Hub")
     return parser.parse_args()
 
@@ -149,6 +150,11 @@ def get_compute_dtype(dtype_str: str):
 
 def main():
     args = parse_args()
+
+    # 在导入 torch 之前设置 GPU，避免 device_map="auto" 跨卡分布导致 BnB 报错
+    if args.gpu is not None:
+        os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
+        print(f"指定 GPU: {args.gpu}")
 
     print("=" * 60)
     print("BnB NF4 量化 - Qwen3-VL 多模态模型")
@@ -282,30 +288,70 @@ def main():
     if args.bits == 4 and args.double_quant:
         print("    双重量化: 已启用（约节省 0.4 bit/参数）")
 
-    # 6. 保存模型
+    # 6. 保存模型（手动保存，绕过 save_pretrained 的 safetensors 死锁问题）
+    #
+    # 根因：save_pretrained() 内部的 safetensors 序列化器在处理 BnB NF4 参数时死锁。
+    # BnB NF4 参数使用特殊格式（uint8 容器 + quant_state 元数据），
+    # safetensors 尝试序列化时触发 GPU 同步操作，导致死锁。
+    #
+    # 解决方案：手动用 torch.save 保存，直接操作底层存储，不经过 BnB 的 __torch_function__ 钩子。
+    #
     print(f"\n[4/5] 保存模型到 {args.output}...")
-    print(f"  使用格式: {'safetensors' if args.use_safetensors else 'pytorch'}")
-    print(f"  分片大小: {args.max_shard_size}")
     os.makedirs(args.output, exist_ok=True)
 
-    # 保存模型权重（BnB NF4 量化权重，体积约为 FP16 的 1/4）
-    print("  正在保存量化权重（可能需要几分钟，请耐心等待）...")
-    try:
-        model.save_pretrained(
-            args.output,
-            max_shard_size=args.max_shard_size,
-            safe_serialization=args.use_safetensors,
-        )
-        print("  ✓ 模型权重保存完成")
-    except Exception as e:
-        print(f"  ⚠ safetensors 保存失败: {e}")
-        print("  尝试使用 pytorch 格式保存...")
-        model.save_pretrained(
-            args.output,
-            max_shard_size=args.max_shard_size,
-            safe_serialization=False,
-        )
-        print("  ✓ 模型权重保存完成（pytorch 格式）")
+    print("  正在保存量化权重（手动 torch.save，绕过 safetensors 死锁）...")
+
+    # 先同步所有 GPU 操作
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+
+    model_state = {}
+    total_params = sum(1 for _ in model.named_parameters())
+    saved = 0
+    errors = 0
+
+    for i, (name, param) in enumerate(model.named_parameters()):
+        if i % 100 == 0 or i == total_params - 1:
+            print(f"    处理参数: {i+1}/{total_params} ({100*(i+1)/total_params:.0f}%)")
+
+        try:
+            # 方法：直接访问底层存储，绕过 BnB 的 __torch_function__ 钩子
+            # BnB 的 Params4bit.data 会触发 GPU 反量化，所以我们绕过它
+            storage = param.storage()
+            if storage.device.type == 'cuda':
+                # 直接复制底层存储到 CPU，不触发 BnB 钩子
+                cpu_storage = torch.UntypedStorage(storage.size(), device='cpu')
+                cpu_storage.copy_(storage)
+                # 重建 tensor，保持原始 dtype 和 shape
+                t = torch.tensor([], dtype=param.dtype, device='cpu')
+                t.set_(cpu_storage, storage_offset=param.storage_offset(),
+                       size=param.shape, stride=param.stride())
+            else:
+                t = param.data
+            model_state[name] = t
+            saved += 1
+        except Exception as e:
+            # 如果上述方法失败，回退到直接保存 GPU tensor
+            print(f"    ⚠ 参数 {name} 处理失败: {e}，尝试直接保存...")
+            try:
+                model_state[name] = param.data
+                saved += 1
+            except Exception as e2:
+                print(f"    ✗ 跳过参数 {name}: {e2}")
+                errors += 1
+
+    print(f"  保存了 {saved}/{total_params} 个参数（失败 {errors} 个）")
+
+    # 用 torch.save（pickle 协议），不走 safetensors
+    model_path = os.path.join(args.output, "model.safetensors")
+    torch.save(model_state, model_path)
+    del model_state
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+    model_size = os.path.getsize(model_path) / (1024 * 1024)
+    print(f"  ✓ 模型权重保存完成: {model_path} ({model_size:.2f} MB)")
 
     # 保存 tokenizer
     tokenizer.save_pretrained(args.output)
