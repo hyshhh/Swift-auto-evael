@@ -3,8 +3,8 @@
 功能：通过大模型识别图片中船体侧面的弦号位置，输出可视化结果
 
 使用方法：
-    python OCR.py --image_dir G:/秋招/weitiao/ms-swift/evelhys/images
-    python OCR.py --image_dir G:/秋招/weitiao/ms-swift/evelhys/images --output_dir ./results
+    python OCR.py --image_dir /media/ddc/新加卷/hys/hysnew3/OCR-peddle-v2.0/crops
+    python OCR.py --image_dir /media/ddc/新加卷/hys/hysnew3/OCR-peddle-v2.0/crops --output_dir ./results
 """
 
 import os
