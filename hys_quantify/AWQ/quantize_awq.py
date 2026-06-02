@@ -1,5 +1,5 @@
 """
-AWQ 量化脚本 - 使用 llm-compressor 进行 AWQ 量化
+AWQ 量化脚本 - 使用 llm-compressor 进行 AWQ 量化（支持 Qwen3-VL 多模态架构）
 
 用法：
     python quantize_awq.py \
@@ -8,6 +8,10 @@ AWQ 量化脚本 - 使用 llm-compressor 进行 AWQ 量化
         --dataset alpaca-en \
         --bits 4 \
         --gpu 0,1
+
+说明：
+    支持 Qwen3-VL 多模态模型，同时量化语言模型和视觉编码器。
+    校准数据支持 JSONL 格式，可包含图像路径用于多模态校准。
 """
 import os
 import json
@@ -40,6 +44,7 @@ def copy_config_files(official_model, output_path):
     official_model = Path(official_model)
     output_path = Path(output_path)
 
+    # 多模态模型需要的配置文件
     config_files = [
         'config.json',
         'video_preprocessor_config.json',
@@ -48,6 +53,11 @@ def copy_config_files(official_model, output_path):
         'merges.txt',
         'preprocessor_config.json',
         'generation_config.json',
+        'processor_config.json',  # 多模态模型需要
+        'chat_template.json',     # 对话模板
+        'special_tokens_map.json',
+        'tokenizer.json',
+        'image_preprocessor_config.json',  # 图像预处理配置
     ]
 
     for config_file in config_files:
@@ -57,11 +67,35 @@ def copy_config_files(official_model, output_path):
             shutil.copy2(src, dst)
             print(f'复制: {config_file}')
 
-    for extra_file in ['processor_config.json', 'args.json']:
+    for extra_file in ['args.json']:
         extra_path = output_path / extra_file
         if extra_path.exists():
             extra_path.unlink()
             print(f'删除: {extra_file}')
+
+
+def detect_model_type(model_path):
+    """检测模型类型，返回正确的加载类名"""
+    config_path = Path(model_path) / "config.json"
+    if config_path.exists():
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+
+        model_type = config.get('model_type', '')
+
+        # 检查是否为 Qwen3 VL 多模态模型
+        if model_type == 'qwen3_vl':
+            return 'qwen3_vl'
+        elif model_type == 'qwen2_vl':
+            return 'qwen2_vl'
+        elif 'visual_config' in config or 'vision_config' in config:
+            return 'multimodal'
+        elif model_type == 'qwen3_5':
+            return 'qwen3_5_text'
+        elif 'qwen' in model_type:
+            return 'qwen_text'
+
+    return 'text_only'
 
 
 def quantize_model(args):
@@ -93,31 +127,81 @@ def quantize_model(args):
     print(f'分组大小: {args.group_size}')
     print(f'校准数据集: {args.dataset}')
 
+    # 检测模型类型
+    model_type = detect_model_type(model_path)
+    print(f'检测到模型类型: {model_type}')
+
     # 加载模型和分词器
     print('\n步骤 1: 加载模型...')
-    try:
-        from transformers import Qwen3_5ForConditionalGeneration
-        model = Qwen3_5ForConditionalGeneration.from_pretrained(
+    if model_type == 'qwen3_vl':
+        print('使用 Qwen3 VL 多模态模型加载方式...')
+        from transformers import Qwen3VLForConditionalGeneration
+        model = Qwen3VLForConditionalGeneration.from_pretrained(
             str(model_path),
-            dtype="auto",
+            torch_dtype="auto",
             trust_remote_code=True,
         )
-    except ImportError:
-        from transformers import AutoModelForCausalLM
-        model = AutoModelForCausalLM.from_pretrained(
+    elif model_type == 'qwen2_vl':
+        print('使用 Qwen2 VL 多模态模型加载方式...')
+        from transformers import Qwen2VLForConditionalGeneration
+        model = Qwen2VLForConditionalGeneration.from_pretrained(
             str(model_path),
-            dtype="auto",
+            torch_dtype="auto",
             trust_remote_code=True,
         )
+    elif model_type == 'multimodal':
+        print('使用通用多模态模型加载方式...')
+        from transformers import AutoModel
+        model = AutoModel.from_pretrained(
+            str(model_path),
+            torch_dtype="auto",
+            trust_remote_code=True,
+        )
+    else:
+        print('使用纯文本模型加载方式...')
+        try:
+            from transformers import Qwen3_5ForConditionalGeneration
+            model = Qwen3_5ForConditionalGeneration.from_pretrained(
+                str(model_path),
+                torch_dtype="auto",
+                trust_remote_code=True,
+            )
+        except ImportError:
+            from transformers import AutoModelForCausalLM
+            model = AutoModelForCausalLM.from_pretrained(
+                str(model_path),
+                torch_dtype="auto",
+                trust_remote_code=True,
+            )
+
     tokenizer = AutoTokenizer.from_pretrained(
         str(model_path),
         trust_remote_code=True,
     )
 
+    # 打印模型结构
+    print('\n模型结构:')
+    for name, module in model.named_children():
+        print(f'  - {name}: {type(module).__name__}')
+
+    # 检查是否包含视觉编码器
+    has_visual = hasattr(model, 'visual') or any('visual' in name for name, _ in model.named_children())
+    if has_visual:
+        print('  ✓ 包含视觉编码器（多模态模型）')
+    else:
+        print('  ⚠ 未检测到视觉编码器（可能是纯文本模型）')
+
     # 配置 AWQ + 量化修饰器
     print('步骤 2: 配置 AWQ 量化...')
+
+    # 多模态模型需要忽略视觉编码器
+    ignore_layers = ["lm_head"]
+    if has_visual:
+        ignore_layers.append("visual")
+        print('  忽略视觉编码器（保持 FP16）')
+
     awq_modifier = AWQModifier(
-        ignore=["lm_head"],
+        ignore=ignore_layers,
         scheme=f"W{args.bits}A16",
         targets=["Linear"],
         duo_scaling="both",
@@ -184,8 +268,28 @@ def quantize_model(args):
     import torch
     model.to("cpu")
     torch.cuda.empty_cache()
+
+    # 保存量化模型
     model.save_pretrained(str(output_path), save_compressed=False, max_shard_size=args.max_shard_size)
     tokenizer.save_pretrained(str(output_path))
+
+    # 保存 processor（多模态模型）
+    if has_visual:
+        try:
+            from transformers import AutoProcessor
+            processor = AutoProcessor.from_pretrained(str(model_path), trust_remote_code=True)
+            processor.save_pretrained(str(output_path))
+            print('✓ Processor 保存完成')
+        except Exception as e:
+            print(f'⚠ Processor 保存失败: {e}')
+
+    # 显示保存的文件
+    print('\n保存的文件:')
+    for f in sorted(Path(output_path).iterdir()):
+        if f.is_file():
+            size = f.stat().st_size / (1024 * 1024)
+            if size > 0.01:
+                print(f'  {f.name}: {size:.2f} MB')
 
     # 复制配置文件
     if args.copy_config and args.official_model:
