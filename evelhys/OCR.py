@@ -20,9 +20,22 @@ from tqdm import tqdm
 
 
 # ==================== 配置 ====================
+# API 模式（远程调用）
 API_KEY = "sk-dllnqafnfsrvpxtttcepjrbyljrjausbjblbjbodtpvlmmri"
 API_URL = "https://api.siliconflow.cn/v1/chat/completions"
-MODEL_NAME = "Qwen/Qwen3-VL-8B-Instruct"
+MODEL_NAME = "Qwen/Qwen3.5-VL-2B-Instruct"
+
+# 本地模式（vLLM 本地服务）
+LOCAL_MODE = True  # 设为 True 使用本地模型
+LOCAL_API_URL = "http://localhost:7890/v1/chat/completions"
+LOCAL_MODEL_NAME = "Qwen/Qwen3-VL-4B-AWQ"
+LOCAL_API_KEY = "abc123"
+
+# 根据模式选择配置
+if LOCAL_MODE:
+    API_URL = LOCAL_API_URL
+    MODEL_NAME = LOCAL_MODEL_NAME
+    API_KEY = LOCAL_API_KEY
 
 # 提示词
 PROMPT = """你是一个专业的弦号识别专家。
