@@ -294,9 +294,9 @@ def quantize_model(args):
     else:
         calib_texts = calib_data if calib_data else []
 
-    # 新版 gptqmodel 量化方式
+    # 新版 gptqmodel 量化方式（校准数据作为位置参数）
     if calib_texts:
-        model.quantize(calibration_dataset=calib_texts)
+        model.quantize(calib_texts)
     else:
         model.quantize()
 
