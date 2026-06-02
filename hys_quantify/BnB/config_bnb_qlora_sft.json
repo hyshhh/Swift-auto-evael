@@ -1,0 +1,42 @@
+{
+  "model": "path/to/your/bnb-quantized-model",
+  "dataset": "path/to/your/dataset.jsonl",
+  "output_dir": "output/bnb-qlora-sft",
+
+  "train_type": "lora",
+
+  "quant_bits": 4,
+
+  "lora_rank": 64,
+  "lora_alpha": 128,
+  "lora_dropout": 0.05,
+  "target_modules": [
+    "q_proj", "k_proj", "v_proj", "o_proj",
+    "gate_proj", "up_proj", "down_proj"
+  ],
+
+  "num_train_epochs": 3,
+  "per_device_train_batch_size": 2,
+  "gradient_accumulation_steps": 8,
+  "learning_rate": 2e-4,
+  "lr_scheduler_type": "cosine",
+  "warmup_ratio": 0.05,
+  "weight_decay": 0.01,
+
+  "max_length": 2048,
+  "logging_steps": 10,
+  "save_steps": 200,
+  "save_total_limit": 3,
+  "eval_strategy": "steps",
+  "eval_steps": 200,
+
+  "fp16": false,
+  "bf16": true,
+
+  "gradient_checkpointing": true,
+  "dataloader_num_workers": 4,
+
+  "report_to": "tensorboard",
+
+  "note": "BnB NF4 + QLoRA 配置。量化模型已含 BitsAndBytesConfig，此处只需指定 lora 参数。"
+}

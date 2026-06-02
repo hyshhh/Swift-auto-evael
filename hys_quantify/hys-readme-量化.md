@@ -55,6 +55,67 @@ python quantize_gptq.py \
     --gpu 0
 ```
 
+## BnB NF4 量化（简单易用）
+
+> BnB (bitsandbytes) 量化最简单，适合快速实验和 QLoRA 微调。仅量化语言模型部分，视觉编码器保持 FP16。
+
+```bash
+conda activate bnb
+
+# 安装依赖
+pip install bitsandbytes accelerate peft
+
+# NF4 量化（推荐）
+python quantize_bnb.py \
+    --model /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b \
+    --output /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b-bnb-nf4 \
+    --bits 4 \
+    --double_quant
+
+# 验证量化模型
+python verify_bnb.py \
+    --model /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b-bnb-nf4 \
+    --bits 4
+
+# 多模态验证（带图像）
+python verify_bnb.py \
+    --model /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b-bnb-nf4 \
+    --bits 4 \
+    --image /path/to/test_image.jpg
+```
+
+### BnB 量化参数
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `--bits` | 4 | NF4 量化（推荐） |
+| `--bits` | 8 | INT8 量化（精度更高） |
+| `--double_quant` | - | 启用双重量化，额外节省 ~5% 显存 |
+| `--compute_dtype` | bfloat16 | 计算精度（推荐 bf16） |
+
+### BnB vs GPTQ vs AWQ 对比
+
+| 特性 | BnB NF4 | GPTQ INT4 | AWQ INT4 |
+|------|---------|-----------|----------|
+| **易用性** | ⭐⭐⭐ 极简 | ⭐⭐ 中等 | ⭐⭐ 中等 |
+| **量化速度** | ⚡ 极快（分钟） | 慢（小时） | 中等 |
+| **推理速度** | 中等 | ⚡ 快 | ⚡ 快 |
+| **显存效率** | 中等 | ⚡ 高 | ⚡ 高 |
+| **精度** | 高 | 中 | 中 |
+| **多模态支持** | ⚡ 原生支持 | ⚡ 原生支持 | ⚠ 需要 patch |
+| **QLoRA 微调** | ⚡ 原生支持 | 需要额外配置 | 需要额外配置 |
+| **部署支持** | ⚠ 有限 | ⚡ vLLM/LMDeploy | ⚡ vLLM |
+
+### 适用场景
+
+| 场景 | 推荐方法 |
+|------|----------|
+| 快速实验/原型开发 | **BnB** |
+| QLoRA 微调 | **BnB** |
+| 生产部署 | GPTQ/AWQ |
+| 多模态推理 | BnB/GPTQ |
+| 显存受限 | GPTQ/AWQ |
+
 ## vLLM 推理服务
 
 ### AWQ 模型
@@ -140,6 +201,20 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 ## 量化参数说明
 
+### BnB 量化参数
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `--bits` | 4 | NF4 量化（推荐） |
+| `--bits` | 8 | INT8 量化（精度更高） |
+| `--double_quant` | True | 双重量化，额外节省 ~5% 显存 |
+| `--compute_dtype` | bfloat16 | 计算精度（推荐 bf16） |
+
+**NF4 量化原理：**
+- 基于正态分布的 4-bit 浮点数
+- 量化级别：非均匀分布，匹配权重分布
+- 相比 INT4：精度更高（理论最优 4-bit）
+
 ### AWQ 量化参数
 
 | 参数 | 值 | 说明 |
@@ -161,7 +236,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 | `--batch_size` | 1 | 量化批次大小 |
 | `--lm_head` | False | 是否量化 lm_head |
 
-## 4-bit vs INT4
+## 4-bit vs INT4 vs NF4
 
 ### 4-bit（泛指）
 
@@ -173,6 +248,14 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 | FP4 | Float 4-bit | 浮点数，有指数位 |
 | NF4 | NormalFloat 4-bit | 基于正态分布的浮点数（bitsandbytes 用） |
 | MXFP4 | Microscaling FP4 | 分块缩放的浮点数 |
+
+### NF4（BnB 量化）
+
+- **分布**：非均匀，基于正态分布
+- **量化级别**：-1.0, -0.6962, -0.5251, ..., 0, ..., 0.5251, 0.6962, 1.0
+- **特点**：匹配权重的正态分布，理论最优 4-bit
+- **对应 scheme**：`W4A16`（Weight 4-bit NF4，Activation 16-bit）
+- **优势**：精度高于 INT4（尤其当权重近似正态分布时）
 
 ### INT4（你的场景）
 
@@ -190,13 +273,16 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 | 精度 | 中 | 高 |
 | 使用框架 | AWQ, GPTQ | bitsandbytes |
 
-## AWQ vs GPTQ 对比
+## AWQ vs GPTQ vs BnB 对比
 
-| 特性 | AWQ (AutoAWQ) | GPTQ (GPTQModel) |
-|------|---------------|------------------|
-| **Qwen3.5 支持** | ❌ 需要 monkey-patch | ✅ 原生支持（v5.8.0+） |
-| **量化原理** | 激活感知权重量化 | 基于 OBS 的逐层量化 |
-| **校准数据** | 文本列表 | 文本列表（自动 tokenize） |
-| **vLLM 兼容** | ✅ | ✅ |
-| **维护状态** | 更新较慢 | 积极维护（v7.0.0） |
-| **推荐场景** | 传统模型 | 新架构（Qwen3.5 等） |
+| 特性 | AWQ (AutoAWQ) | GPTQ (GPTQModel) | BnB (bitsandbytes) |
+|------|---------------|------------------|-------------------|
+| **Qwen3.5 支持** | ❌ 需要 monkey-patch | ✅ 原生支持（v5.8.0+） | ✅ 原生支持 |
+| **量化原理** | 激活感知权重量化 | 基于 OBS 的逐层量化 | NF4/INT8 动态量化 |
+| **校准数据** | 文本列表 | 文本列表（自动 tokenize） | 不需要 |
+| **vLLM 兼容** | ✅ | ✅ | ⚠ 有限 |
+| **维护状态** | 更新较慢 | 积极维护（v7.0.0） | 积极维护 |
+| **推荐场景** | 传统模型 | 新架构（Qwen3.5 等） | 快速实验/QLoRA |
+| **量化速度** | 中等 | 慢 | ⚡ 极快 |
+| **推理速度** | ⚡ 快 | ⚡ 快 | 中等 |
+| **易用性** | ⭐⭐ | ⭐⭐ | ⭐⭐⭐ 极简 |
