@@ -288,11 +288,13 @@ def quantize_model(args):
 
     # 打印模型结构
     print('\n模型结构:')
-    for name, module in model.named_children():
-        print(f'  - {name}: {type(module).__name__}')
+    inner_model = getattr(model, 'model', model)
+    for name, module in inner_model.named_children():
+        param_count = sum(p.numel() for p in module.parameters())
+        print(f'  - {name}: {type(module).__name__} ({param_count / 1e6:.1f}M params)')
 
     # 检查是否包含视觉编码器
-    has_visual = hasattr(model, 'visual') or any('visual' in name for name, _ in model.named_children())
+    has_visual = hasattr(inner_model, 'visual') or any('visual' in name for name, _ in inner_model.named_children())
     if has_visual:
         print('  ✓ 包含视觉编码器（多模态模型）')
     else:
@@ -308,7 +310,7 @@ def quantize_model(args):
     # 步骤 4: 执行量化
     print('步骤 4: 执行量化...')
 
-    # 提取纯文本列表（新版 gptqmodel 只接受文本列表）
+    # 提取纯文本列表（gptqmodel 只接受文本列表）
     if calib_data and isinstance(calib_data[0], dict):
         calib_texts = [item['text'] for item in calib_data if 'text' in item]
     else:
@@ -316,7 +318,7 @@ def quantize_model(args):
 
     # gptqmodel 量化方式（calibration_dataset 作为位置参数，batch_size 作为关键字参数）
     if calib_texts:
-        model.quantize(calibration_dataset=calib_texts, batch_size=args.batch_size)
+        model.quantize(calib_texts, batch_size=args.batch_size)
     else:
         model.quantize()
 
