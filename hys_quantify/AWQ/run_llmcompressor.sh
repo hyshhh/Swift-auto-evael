@@ -1,18 +1,18 @@
 #!/bin/bash
-# AWQ 量化运行脚本
-# 用法: bash run_quantize.sh
+# AWQ 量化运行脚本（llmcompressor 方式）
+# 用法: bash run_llmcompressor.sh
 
 # ==================== 配置区域 ====================
 
 # 模型路径
-MERGED_MODEL="/media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b"
-OFFICIAL_MODEL="/media/ddc/新加卷/hys/hysnew/Qwen/Qwen3.5-2B"
-AWQ_MODEL="/media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b-awq"
+MERGED_MODEL="/media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-Instruct"
+OFFICIAL_MODEL="/media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-Instruct"
+AWQ_MODEL="/media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-AWQ"
 
 # 量化参数
 QUANT_BITS=4
 GROUP_SIZE=128
-DATASET="alpaca-en"  # 校准数据集，可改为你的数据集路径
+DATASET="/media/ddc/新加卷/hys/qmy/agent/data/sft_val.jsonl"
 
 # GPU 配置
 CUDA_VISIBLE_DEVICES=0
@@ -20,7 +20,7 @@ CUDA_VISIBLE_DEVICES=0
 # ==================== 执行区域 ====================
 
 echo "=========================================="
-echo "AWQ 量化脚本"
+echo "AWQ 量化脚本（llmcompressor）"
 echo "=========================================="
 echo "合并模型: $MERGED_MODEL"
 echo "官方模型: $OFFICIAL_MODEL"

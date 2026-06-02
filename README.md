@@ -173,6 +173,47 @@ swift sft \
     --model_name swift-robot
 ```
 
+### BnB NF4 量化（最简单，支持 vLLM 部署）
+
+```bash
+# 激活环境
+conda activate bnb
+
+# 安装依赖
+pip install bitsandbytes accelerate peft
+
+# 运行量化
+cd hys_quantify/BnB
+bash run.sh
+
+# 验证量化模型
+python verify_bnb.py --model /media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-BnB-NF4 --bits 4
+
+# 使用 vLLM 部署
+vllm serve /media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-BnB-NF4 \
+    --quantization bitsandbytes \
+    --load-format bitsandbytes \
+    --dtype bfloat16 \
+    --max-model-len 8192 \
+    --port 7890 \
+    --api-key abc123 \
+    --served-model-name Qwen/Qwen3-VL-4B-BnB
+```
+
+### GPTQ 量化
+
+```bash
+# 激活环境
+conda activate swifthys
+
+# 安装依赖
+pip install gptqmodel optimum accelerate
+
+# 运行量化
+cd hys_quantify/GPTQ
+bash run_gptq.sh
+```
+
 ### AWQ 量化
 
 ```bash
@@ -180,20 +221,11 @@ swift sft \
 conda activate llmpress
 
 # 安装依赖
-pip install llmcompressor
-pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu124
+pip install llmcompressor autoawq
 
 # 运行量化
-cd /media/ddc/新加卷/hys/hysnew3/Swift-auto-evael/hys_quantify
-
-CUDA_VISIBLE_DEVICES=0 python quantize_awq.py \
-    --model /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b \
-    --output /media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b-awq \
-    --bits 4 \
-    --group_size 128 \
-    --dataset alpaca \
-    --copy_config \
-    --official_model /media/ddc/新加卷/hys/hysnew/Qwen/Qwen3.5-2B
+cd hys_quantify/AWQ
+bash run.sh
 ```
 
 ---
@@ -251,8 +283,14 @@ pip install vllm --upgrade
 **A:** 尝试使用量化或减小 batch size：
 
 ```bash
-# 使用 4-bit 量化
---quantization awq
+# 使用 BnB NF4 量化（最简单）
+cd hys_quantify/BnB && bash run.sh
+
+# 使用 vLLM 部署 BnB 量化模型
+vllm serve /path/to/model-bnb \
+    --quantization bitsandbytes \
+    --load-format bitsandbytes \
+    --dtype bfloat16
 
 # 减小 batch size
 --per_device_train_batch_size 1
@@ -295,12 +333,22 @@ pip install vllm --upgrade
 ```
 Swift-auto-evael/
 ├── README.md                    # 项目说明文档
-├── readme-hys.md                # 详细操作笔记
 ├── eval_behavior.py             # 行为识别评测脚本
-└── hys_quantify/                # AWQ 量化脚本
-    ├── quantize_awq.py          # 量化主脚本
-    ├── run_quantize.sh          # 运行脚本
-    └── README.md                # 量化说明文档
+└── hys_quantify/                # 量化脚本集合
+    ├── README-量化方法.md        # 量化方法总览
+    ├── BnB/                     # BnB NF4 量化（最简单，支持 vLLM）
+    │   ├── quantize_bnb.py      # 量化主脚本
+    │   ├── verify_bnb.py        # 量化验证脚本
+    │   ├── run.sh               # 一键启动脚本
+    │   └── README.md            # 说明文档
+    ├── GPTQ/                    # GPTQ 量化（推荐生产部署）
+    │   ├── quantize_gptq.py     # 量化主脚本
+    │   ├── run_gptq.sh          # 一键启动脚本
+    │   └── README.md            # 说明文档
+    └── AWQ/                     # AWQ 量化
+        ├── quantize_awq.py      # 量化主脚本
+        ├── run.sh               # 一键启动脚本
+        └── README.md            # 说明文档
 ```
 
 ---

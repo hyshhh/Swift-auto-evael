@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 """
-BnB NF4 量化脚本 - 适配 Qwen3.5 多模态模型
+BnB NF4 量化脚本 - 适配 Qwen3-VL 多模态模型
 量化语言模型部分，视觉编码器保持 FP16/BF16
 
-支持流式保存，避免卡住问题
+支持 vLLM 部署（INT4 量化）:
+    vllm serve /path/to/model --quantization bitsandbytes --load-format bitsandbytes
+
+参考: https://docs.vllm.com.cn/en/latest/features/quantization/int4/
 """
 
 import os
 import gc
 import json
 import argparse
+import shutil
 import torch
+from pathlib import Path
 from tqdm import tqdm
 from transformers import (
     AutoModelForCausalLM,
@@ -50,18 +55,74 @@ def detect_model_type(model_path):
     return 'text_only'
 
 
+def copy_config_files(official_model, output_path):
+    """从官方模型复制配置文件，确保 vLLM 兼容性"""
+    official_model = Path(official_model)
+    output_path = Path(output_path)
+
+    config_files = [
+        'config.json',
+        'video_preprocessor_config.json',
+        'image_preprocessor_config.json',
+        'preprocessor_config.json',
+        'generation_config.json',
+        'tokenizer_config.json',
+        'tokenizer.json',
+        'vocab.json',
+        'merges.txt',
+        'special_tokens_map.json',
+        'chat_template.json',
+        'processor_config.json',
+    ]
+
+    for config_file in config_files:
+        src = official_model / config_file
+        dst = output_path / config_file
+        if src.exists():
+            shutil.copy2(src, dst)
+            print(f'  复制: {config_file}')
+
+
+def patch_config_for_vllm(output_path, quant_bits, quant_type):
+    """修补 config.json，添加 vLLM 需要的 quantization_config 字段"""
+    config_path = Path(output_path) / "config.json"
+    if not config_path.exists():
+        print("  ⚠ config.json 不存在，跳过修补")
+        return
+
+    with open(config_path, 'r', encoding='utf-8') as f:
+        config = json.load(f)
+
+    # 添加 quantization_config，vLLM 靠此字段自动识别量化方式
+    config['quantization_config'] = {
+        "quant_method": "bitsandbytes",
+        "bits": quant_bits,
+        "bnb_4bit_quant_type": quant_type,
+        "bnb_4bit_compute_dtype": "bfloat16",
+        "bnb_4bit_use_double_quant": True,
+        "load_in_4bit": quant_bits == 4,
+        "load_in_8bit": quant_bits == 8,
+    }
+
+    with open(config_path, 'w', encoding='utf-8') as f:
+        json.dump(config, f, indent=2, ensure_ascii=False)
+
+    print("  ✓ 已修补 config.json（添加 quantization_config）")
+
+
 def parse_args():
-    parser = argparse.ArgumentParser(description="BnB NF4 量化 Qwen3.5 多模态模型")
+    parser = argparse.ArgumentParser(description="BnB NF4 量化 Qwen3-VL 多模态模型")
     parser.add_argument("--model", type=str, required=True, help="模型路径")
     parser.add_argument("--output", type=str, required=True, help="输出路径")
     parser.add_argument("--bits", type=int, default=4, choices=[4, 8], help="量化位数 (4=NF4, 8=INT8)")
     parser.add_argument("--double_quant", action="store_true", help="启用双重量化（进一步压缩）")
     parser.add_argument("--compute_dtype", type=str, default="bfloat16",
                        choices=["float16", "bfloat16", "float32"], help="计算精度")
-    parser.add_argument("--save_merged", action="store_true", help="保存合并后的模型（不含量化配置）")
-    parser.add_argument("--push_to_hub", type=str, default=None, help="推送到 HuggingFace Hub")
-    parser.add_argument("--max_shard_size", type=str, default="1GB", help="每个分片最大大小")
+    parser.add_argument("--max_shard_size", type=str, default="2GB", help="每个分片最大大小")
     parser.add_argument("--use_safetensors", action="store_true", default=True, help="使用 safetensors 格式（推荐）")
+    parser.add_argument("--copy_config", action="store_true", help="从官方模型复制配置文件")
+    parser.add_argument("--official_model", type=str, default=None, help="官方模型路径（用于复制配置）")
+    parser.add_argument("--push_to_hub", type=str, default=None, help="推送到 HuggingFace Hub")
     return parser.parse_args()
 
 
@@ -79,7 +140,7 @@ def main():
     args = parse_args()
 
     print("=" * 60)
-    print("BnB NF4 量化 - Qwen3.5 多模态模型")
+    print("BnB NF4 量化 - Qwen3-VL 多模态模型")
     print("=" * 60)
     print(f"模型路径: {args.model}")
     print(f"输出路径: {args.output}")
@@ -101,7 +162,7 @@ def main():
             load_in_8bit=True,
         )
 
-    print("\n[1/4] 加载模型（量化配置）...")
+    print("\n[1/5] 加载模型（量化配置）...")
 
     # 2. 检测模型类型
     model_type = detect_model_type(args.model)
@@ -155,15 +216,15 @@ def main():
         )
         print("  ✓ 使用 AutoModelForCausalLM 加载")
 
-    # 3. 加载 tokenizer 和 processor
-    print("[2/4] 加载 Tokenizer 和 Processor...")
+    # 4. 加载 tokenizer 和 processor
+    print("\n[2/5] 加载 Tokenizer 和 Processor...")
     tokenizer = AutoTokenizer.from_pretrained(
         args.model,
         trust_remote_code=True,
         use_fast=True,
     )
 
-    # Qwen3.5 多模态模型有 processor（处理图像）
+    # Qwen3-VL 多模态模型有 processor（处理图像）
     try:
         processor = AutoProcessor.from_pretrained(
             args.model,
@@ -176,8 +237,8 @@ def main():
         processor = None
         print("  ⚠ 未检测到 Processor（非多模态模型）")
 
-    # 4. 准备模型用于训练（如果需要 QLoRA 微调）
-    print("[3/4] 准备模型...")
+    # 5. 准备模型用于训练（如果需要 QLoRA 微调）
+    print("\n[3/5] 准备模型...")
     if args.bits == 4:
         model = prepare_model_for_kbit_training(model)
 
@@ -200,16 +261,14 @@ def main():
     if args.bits == 4 and args.double_quant:
         print("  双重量化: 已启用（约节省 0.4 bit/参数）")
 
-    # 5. 保存模型（流式写入，避免卡住）
-    print(f"\n[4/4] 保存模型到 {args.output}...")
+    # 6. 保存模型
+    print(f"\n[4/5] 保存模型到 {args.output}...")
     print(f"  使用格式: {'safetensors' if args.use_safetensors else 'pytorch'}")
     print(f"  分片大小: {args.max_shard_size}")
     os.makedirs(args.output, exist_ok=True)
 
-    # 使用流式保存，避免内存占用过高
+    # 保存模型权重
     print("  正在保存模型分片...")
-
-    # 保存配置和分片权重
     model.save_pretrained(
         args.output,
         max_shard_size=args.max_shard_size,
@@ -226,50 +285,33 @@ def main():
         processor.save_pretrained(args.output)
         print("  ✓ Processor 保存完成")
 
+    # 7. 修补配置，确保 vLLM 兼容
+    print(f"\n[5/5] 修补配置（vLLM 兼容）...")
+    quant_type = "nf4" if args.bits == 4 else "int8"
+    patch_config_for_vllm(args.output, args.bits, quant_type)
+
+    # 可选：从官方模型复制配置文件
+    if args.copy_config and args.official_model:
+        print("  从官方模型复制配置文件...")
+        copy_config_files(args.official_model, args.output)
+        # 重新修补（因为复制会覆盖）
+        patch_config_for_vllm(args.output, args.bits, quant_type)
+
     # 显示保存的文件列表
     print("\n  保存的文件:")
+    total_size = 0
     for f in sorted(os.listdir(args.output)):
-        size = os.path.getsize(os.path.join(args.output, f)) / (1024 * 1024)
-        print(f"    {f}: {size:.2f} MB")
-
-    # 如果需要保存合并模型（不含量化配置，用于部署）
-    if args.save_merged:
-        print("\n  保存合并模型（反量化为 FP16）...")
-        merged_path = os.path.join(args.output, "merged")
-        os.makedirs(merged_path, exist_ok=True)
-
-        # 释放当前模型内存
-        del model
-        gc.collect()
-        torch.cuda.empty_cache()
-
-        # 重新加载原始模型（FP16）
-        model_unmerged = AutoModelForCausalLM.from_pretrained(
-            args.model,
-            device_map="auto",
-            trust_remote_code=True,
-            torch_dtype=get_compute_dtype(args.compute_dtype),
-            low_cpu_mem_usage=True,  # 降低内存占用
-        )
-
-        # 流式保存合并模型
-        model_unmerged.save_pretrained(
-            merged_path,
-            max_shard_size=args.max_shard_size,
-            safe_serialization=args.use_safetensors,
-        )
-        tokenizer.save_pretrained(merged_path)
-        if has_processor and processor is not None:
-            processor.save_pretrained(merged_path)
-
-        del model_unmerged
-        gc.collect()
-        torch.cuda.empty_cache()
-        print("  ✓ 合并模型保存完成")
+        fpath = os.path.join(args.output, f)
+        if os.path.isfile(fpath):
+            size = os.path.getsize(fpath)
+            total_size += size
+            if size > 1024 * 1024:
+                print(f"    {f}: {size / (1024 * 1024):.2f} MB")
+    print(f"  总大小: {total_size / (1024 * 1024):.2f} MB")
 
     # 推送到 Hub
     if args.push_to_hub:
-        print(f"  推送到 {args.push_to_hub}...")
+        print(f"\n  推送到 {args.push_to_hub}...")
         model.push_to_hub(args.push_to_hub)
         tokenizer.push_to_hub(args.push_to_hub)
         if has_processor and processor is not None:
@@ -287,10 +329,16 @@ def main():
     # 推荐下一步
     print("\n推荐下一步:")
     print("  1. 验证量化模型:")
-    print(f"     python verify_bnb.py --model {args.output}")
-    print("  2. 使用 ms-swift 微调:")
-    print(f"     swift sft --model {args.output} ...")
-    print("  3. 使用 vLLM 部署（需要合并模型）:")
+    print(f"     python verify_bnb.py --model {args.output} --bits {args.bits}")
+    print("  2. 使用 vLLM 部署:")
+    print(f"     vllm serve {args.output} \\")
+    print(f"         --quantization bitsandbytes \\")
+    print(f"         --load-format bitsandbytes \\")
+    print(f"         --dtype bfloat16 \\")
+    print(f"         --max-model-len 8192 \\")
+    print(f"         --port 7890")
+    print("  3. 使用 ms-swift 微调:")
+    print(f"     swift sft --model {args.output} --train_type lora ...")
 
 
 if __name__ == "__main__":

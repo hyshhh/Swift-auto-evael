@@ -1,15 +1,17 @@
 #!/bin/bash
-# AWQ 量化启动脚本
+# AWQ 量化启动脚本（支持 Qwen3-VL 多模态模型）
 
 set -e
 
 # ==================== 配置区 ====================
 # 修改以下路径为你的实际路径
 
-MODEL_PATH="/media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b"
-OUTPUT_PATH="/media/ddc/新加卷/hys/hysnew3/model/wt-Qwen2b-awq"
+MERGED_MODEL="/media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-Instruct"
+OFFICIAL_MODEL="/media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-Instruct"
+AWQ_MODEL="/media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-AWQ"
+
+# 校准数据集
 DATASET_PATH="/media/ddc/新加卷/hys/qmy/agent/data/sft_val.jsonl"
-OFFICIAL_MODEL="/media/ddc/新加卷/hys/hysnew/Qwen/Qwen3.5-2B"
 
 # 量化参数
 BITS=4
@@ -18,7 +20,8 @@ GPU=0
 
 # ==================== 环境检查 ====================
 echo "=========================================="
-echo "AWQ 量化 - Qwen3.5 多模态模型"
+echo "AWQ 量化 - Qwen3-VL 多模态模型"
+echo "参考: https://docs.vllm.ai/en/latest/features/quantization/auto_awq.html"
 echo "=========================================="
 
 # 检查 conda 环境
@@ -33,38 +36,47 @@ nvidia-smi -i $GPU --query-gpu=name,memory.total --format=csv,noheader 2>/dev/nu
 # ==================== 量化方式选择 ====================
 echo ""
 echo "选择量化方式:"
-echo "  1) llmcompressor (推荐)"
-echo "  2) AutoAWQ"
+echo "  1) AutoAWQ（推荐，vLLM 原生支持）"
+echo "  2) llmcompressor"
 read -p "请输入选择 [1/2]: " CHOICE
 
 case $CHOICE in
     2)
-        echo "使用 AutoAWQ 量化..."
-        python quantize_autoawq.py \
-            --model $MODEL_PATH \
-            --output $OUTPUT_PATH \
+        echo "使用 llmcompressor 量化..."
+        CUDA_VISIBLE_DEVICES=$GPU python quantize_awq.py \
+            --model $MERGED_MODEL \
+            --output $AWQ_MODEL \
             --dataset $DATASET_PATH \
             --bits $BITS \
             --group_size $GROUP_SIZE \
+            --copy_config \
+            --official_model $OFFICIAL_MODEL
+        ;;
+    *)
+        echo "使用 AutoAWQ 量化..."
+        python quantize_autoawq.py \
+            --model $MERGED_MODEL \
+            --output $AWQ_MODEL \
+            --dataset $DATASET_PATH \
+            --bits $BITS \
+            --group_size $GROUP_SIZE \
+            --version GEMM \
             --copy_config \
             --official_model $OFFICIAL_MODEL \
             --gpu $GPU
         ;;
-    *)
-        echo "使用 llmcompressor 量化..."
-        CUDA_VISIBLE_DEVICES=$GPU python quantize_llmcompressor.py \
-            --model $MODEL_PATH \
-            --output $OUTPUT_PATH \
-            --bits $BITS \
-            --group_size $GROUP_SIZE \
-            --dataset $DATASET_PATH \
-            --copy_config \
-            --official_model $OFFICIAL_MODEL
-        ;;
 esac
 
 echo ""
+echo "=========================================="
 echo "✓ 量化完成!"
-echo "输出路径: $OUTPUT_PATH"
+echo "输出路径: $AWQ_MODEL"
 echo ""
-echo "验证模型: python verify.py --model $OUTPUT_PATH"
+echo "使用 vLLM 加载量化模型:"
+echo "  vllm serve $AWQ_MODEL \\"
+echo "      --api-key abc123 \\"
+echo "      --served-model-name Qwen/Qwen3-VL-4B-AWQ \\"
+echo "      --max-model-len 8192 \\"
+echo "      --port 7890 \\"
+echo "      --quantization awq"
+echo "=========================================="

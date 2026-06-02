@@ -42,14 +42,14 @@ hys_quantify/
 ├── README-量化方法.md      # 本文档（总览）
 ├── AWQ/                    # AWQ 量化
 │   ├── README.md
-│   ├── run.sh
-│   ├── quantize_llmcompressor.py
-│   └── quantize_autoawq.py
+│   ├── run.sh              # 一键启动（支持选择 AutoAWQ/llmcompressor）
+│   ├── run_llmcompressor.sh
+│   ├── quantize_autoawq.py # AutoAWQ 量化（推荐，vLLM 原生支持）
+│   └── quantize_awq.py     # llmcompressor 量化
 ├── GPTQ/                   # GPTQ 量化
 │   ├── README.md
-│   ├── run.sh
-│   ├── quantize_gptq.py
-│   └── run_swift.py
+│   ├── run_gptq.sh
+│   └── quantize_gptq.py
 ├── BnB/                    # BnB NF4 量化
 │   ├── README.md
 │   ├── run.sh
@@ -79,13 +79,16 @@ conda activate swifthys
 bash run.sh
 ```
 
-### 方法三：AWQ（传统方案）
+### 方法三：AWQ（vLLM 原生支持）
 
 ```bash
 cd AWQ
 conda activate llmpress
 bash run.sh
 ```
+
+> **推荐使用 AutoAWQ**，vLLM 原生支持，无需额外配置。
+> 参考：[vLLM AutoAWQ 文档](https://docs.vllm.ai/en/latest/features/quantization/auto_awq.html)
 
 ---
 
@@ -112,7 +115,10 @@ pip install ms-swift gptqmodel optimum accelerate
 ```bash
 conda create -n llmpress python=3.10 -y
 conda activate llmpress
-pip install llmcompressor ms-swift autoawq
+pip install autoawq ms-swift
+
+# 如需使用 llmcompressor 方式
+pip install llmcompressor
 ```
 
 ---
@@ -201,8 +207,11 @@ swift sft --model /path/to/model-gptq --train_type lora ...
 **答：推荐 GPTQ/AWQ**
 
 ```bash
-# vLLM
+# vLLM（GPTQ）
 vllm serve /path/to/model-gptq --quantization gptq
+
+# vLLM（AWQ，原生支持）
+vllm serve /path/to/model-awq --quantization awq
 
 # LMDeploy
 lmdeploy serve /path/to/model-gptq --model-format gptq
