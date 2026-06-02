@@ -219,7 +219,7 @@ def quantize_model(args):
         print(f'使用 GPU: {args.gpu}')
 
     from gptqmodel import GPTQModel
-    from gptqmodel.quantization.config import GPTQConfig
+    from gptqmodel.quantization import GPTQConfig
     from transformers import AutoTokenizer
 
     print('=' * 60)
