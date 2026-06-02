@@ -319,9 +319,13 @@ def quantize_model(args):
         except Exception as e:
             print(f'⚠ Processor 保存失败: {e}')
 
-    # 复制配置文件
-    if args.copy_config and args.official_model:
-        print('\n步骤 6: 复制配置文件...')
+    # 自动从原模型复制配置文件（无论是否指定 --copy_config）
+    print('\n步骤 6: 复制配置文件...')
+    copy_config_files(model_path, output_path)
+
+    # 如果指定了官方模型，也从官方模型复制（覆盖）
+    if args.copy_config and args.official_model and args.official_model != str(model_path):
+        print('从官方模型复制配置文件...')
         copy_config_files(args.official_model, output_path)
 
     # 保存量化信息
