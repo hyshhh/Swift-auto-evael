@@ -28,11 +28,26 @@
 
 ## 🎯 项目背景
 ### 环境配置
+
     conda create -n swifthys python=3.10 -y
     conda activate swifthys
     pip install ms-swift -U
     pip install "qwen_vl_utils>=0.0.14" decord
     pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124
+
+### 下载模型
+
+```bash
+# 下载 Qwen3-VL-4B 到本地
+modelscope download --model Qwen/Qwen3-VL-4B-Instruct --local_dir /media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-Instruct
+
+# 下载 Qwen3.5-2B 到本地
+modelscope download --model Qwen/Qwen3.5-2B --local_dir /media/ddc/新加卷/hys/hysnew3/model/Qwen3.5-2B
+
+# 下载 Qwen3.5-VL-2B 到本地
+modelscope download --model Qwen/Qwen3.5-VL-2B-Instruct --local_dir /media/ddc/新加卷/hys/hysnew3/model/Qwen3.5-VL-2B-Instruct
+```
+
 ### 问题描述
 
 在使用 ms-swift 框架对 Qwen3.5 模型进行 LoRA 微调后，通过 `swift export --merge_lora` 命令合并权重时，会遇到以下问题：
