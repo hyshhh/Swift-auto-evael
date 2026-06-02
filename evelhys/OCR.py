@@ -10,6 +10,7 @@
 import os
 import re
 import json
+import time
 import base64
 import argparse
 from pathlib import Path
@@ -216,7 +217,10 @@ def draw_result(image_path, x, y, box_size=100, line_width=3):
 
 
 def process_single_image(args, image_path, output_dir):
-    """处理单张图片"""
+    """处理单张图片，返回结果和耗时"""
+    # 计时开始
+    start_time = time.time()
+
     # 调用 API
     response_text = call_vlm_api(args, image_path)
 
@@ -231,12 +235,18 @@ def process_single_image(args, image_path, output_dir):
     output_path = os.path.join(output_dir, f"{image_name}_result.jpg")
     result_img.save(output_path, quality=95)
 
+    # 计时结束
+    end_time = time.time()
+    latency = end_time - start_time
+
     return {
         'image': image_path,
         'x': x,
         'y': y,
         'output': output_path,
         'raw_response': response_text,
+        'latency': latency,
+        'fps': 1.0 / latency if latency > 0 else 0,
     }
 
 
@@ -271,9 +281,10 @@ def main():
             result = process_single_image(args, image_path, output_dir)
             results.append(result)
 
-            # 打印结果
+            # 打印结果（含单帧速度）
             print(f'\n✓ {Path(image_path).name}')
             print(f'  坐标: ({result["x"]:.3f}, {result["y"]:.3f})')
+            print(f'  耗时: {result["latency"]:.2f}s | FPS: {result["fps"]:.2f}')
             print(f'  输出: {result["output"]}')
 
         except Exception as e:
@@ -291,6 +302,20 @@ def main():
     print(f'成功: {len(results)}/{len(image_files)}')
     print(f'结果保存到: {output_dir}')
     print(f'汇总文件: {summary_path}')
+
+    # 速度统计
+    if results:
+        latencies = [r['latency'] for r in results]
+        avg_latency = sum(latencies) / len(latencies)
+        avg_fps = 1.0 / avg_latency if avg_latency > 0 else 0
+        min_latency = min(latencies)
+        max_latency = max(latencies)
+
+        print(f'\n【速度统计】')
+        print(f'平均耗时: {avg_latency:.2f}s')
+        print(f'平均 FPS: {avg_fps:.2f} fps')
+        print(f'最快: {min_latency:.2f}s ({1.0/min_latency:.2f} fps)')
+        print(f'最慢: {max_latency:.2f}s ({1.0/max_latency:.2f} fps)')
 
 
 if __name__ == '__main__':
