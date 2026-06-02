@@ -218,7 +218,7 @@ def quantize_model(args):
         os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
         print(f'使用 GPU: {args.gpu}')
 
-    from gptqmodel import GPTQModel
+    from gptqmodel import GPTQModel, QuantizeConfig
     from transformers import AutoTokenizer
 
     print('=' * 60)
@@ -246,23 +246,24 @@ def quantize_model(args):
     print(f'阻尼系数: {args.damp_percent}')
     print(f'量化 lm_head: {args.lm_head}')
 
-    # 步骤 1: 创建量化配置（使用字典格式）
+    # 步骤 1: 创建量化配置
     print('\n步骤 1: 创建量化配置...')
-    quant_config = {
-        'bits': args.bits,
-        'group_size': args.group_size,
-        'sym': args.sym,
-        'desc_act': args.desc_act,
-        'true_sequential': args.true_sequential,
-        'damp_percent': args.damp_percent,
-        'lm_head': args.lm_head,
-    }
+    quant_config = QuantizeConfig(
+        bits=args.bits,
+        group_size=args.group_size,
+        sym=args.sym,
+        desc_act=args.desc_act,
+        true_sequential=args.true_sequential,
+        damp_percent=args.damp_percent,
+        lm_head=args.lm_head,
+    )
 
     # 步骤 2: 加载模型
     print('步骤 2: 加载模型...')
-    model = GPTQModel.load(
+    model = GPTQModel.from_pretrained(
         str(model_path),
         quantize_config=quant_config,
+        torch_dtype="auto",
         trust_remote_code=True,
     )
 
@@ -294,9 +295,9 @@ def quantize_model(args):
     else:
         calib_texts = calib_data if calib_data else []
 
-    # 新版 gptqmodel 量化方式（校准数据作为位置参数）
+    # gptqmodel 量化方式（calibration_dataset 作为位置参数，batch_size 作为关键字参数）
     if calib_texts:
-        model.quantize(calib_texts)
+        model.quantize(calibration_dataset=calib_texts, batch_size=args.batch_size)
     else:
         model.quantize()
 
