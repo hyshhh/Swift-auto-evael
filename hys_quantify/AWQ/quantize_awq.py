@@ -195,7 +195,14 @@ def quantize_model(args):
     # 步骤 1: 加载模型和处理器
     print('\n步骤 1: 加载模型...')
 
-    import swift  # 注册自定义模型类型
+    # 尝试导入 swift（可选，用于注册自定义模型类型）
+    try:
+        import swift
+        print('✓ 已加载 ms-swift')
+    except ImportError as e:
+        print(f'⚠ ms-swift 未安装或不兼容，跳过: {e}')
+        print('  如果使用 Qwen3-VL 标准模型，不需要 ms-swift')
+
     from transformers import AutoProcessor
 
     if model_type in ('qwen3_vl', 'qwen2_vl', 'multimodal'):
