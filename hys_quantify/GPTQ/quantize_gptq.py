@@ -321,7 +321,28 @@ def quantize_model(args):
     if calib_texts:
         calib_messages = [[{'role': 'user', 'content': text}] for text in calib_texts]
         print(f'  校准数据已转换为聊天格式，共 {len(calib_messages)} 条')
-        model.quantize(calib_messages, batch_size=args.batch_size)
+
+        # 检查校准数据是否包含图像
+        has_image_in_data = any(
+            'image' in msg or 'images' in msg
+            for sample in calib_data if isinstance(sample, dict)
+            for msg in ([sample] if isinstance(sample, dict) else sample)
+        )
+
+        # 纯文本校准（无图像）时，gptqmodel 的 cache_inputs 将 input_ids 放在 CPU
+        # （因无 pixel_values，data_device=CPU），但 pre_quantize_generate_hook_start
+        # 会把 embed_tokens 移到 CUDA，导致设备不匹配。
+        # 修复：monkey-patch 掉该 hook，让 embed_tokens 留在 CPU。
+        if not has_image_in_data and has_visual:
+            print('  ⚠ 多模态模型 + 纯文本校准：禁用 pre_quantize_generate_hook 避免设备不匹配')
+            original_hook = model.pre_quantize_generate_hook_start
+            model.pre_quantize_generate_hook_start = lambda: None
+            try:
+                model.quantize(calib_messages, batch_size=args.batch_size)
+            finally:
+                model.pre_quantize_generate_hook_start = original_hook
+        else:
+            model.quantize(calib_messages, batch_size=args.batch_size)
     else:
         model.quantize()
 
