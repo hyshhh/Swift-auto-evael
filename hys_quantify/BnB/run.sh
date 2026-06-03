@@ -16,8 +16,8 @@ DOUBLE_QUANT=true
 COMPUTE_DTYPE="bfloat16"
 MAX_SHARD_SIZE="2GB"
 
-# GPU 配置
-CUDA_VISIBLE_DEVICES=0
+# GPU 配置（推荐用 A6000 等大显存卡，如 GPU 1 或 2）
+CUDA_VISIBLE_DEVICES=1
 
 # ==================== 环境检查 ====================
 echo "=========================================="

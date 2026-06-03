@@ -16,18 +16,19 @@ conda create -n bnb python=3.10 -y
 conda activate bnb
 pip install bitsandbytes accelerate peft
 
-# 2. 量化
+# 2. 量化（指定 GPU 1 = A6000 49GB）
 bash run.sh
 
 # 3. 验证
 python verify_bnb.py --model /path/to/output --bits 4
 
 # 4. vLLM 部署
-vllm serve /path/to/output \
+CUDA_VISIBLE_DEVICES=1 vllm serve /path/to/output \
     --quantization bitsandbytes \
     --load-format bitsandbytes \
     --dtype bfloat16 \
     --max-model-len 8192 \
+    --gpu-memory-utilization 0.90 \
     --port 7890
 ```
 
@@ -53,8 +54,11 @@ vllm serve /path/to/output \
 | `--bits` | 4 | 量化位数 (4=NF4, 8=INT8) |
 | `--double_quant` | False | 双重量化（额外节省 ~5%） |
 | `--compute_dtype` | bfloat16 | 计算精度 |
+| `--gpu` | None | 指定 GPU，如 `0` 或 `1`（推荐用大显存卡） |
 | `--copy_config` | False | 从官方模型复制配置文件 |
 | `--official_model` | None | 官方模型路径 |
+
+> **多卡环境必须指定 `--gpu`**，否则 `device_map="auto"` 会跨卡分布，BnB 量化器不允许部分模块落在 CPU，会报错。
 
 ---
 
@@ -73,29 +77,38 @@ vllm serve /path/to/output \
 ### 部署命令
 
 ```bash
-# 基础部署
-vllm serve /path/to/Qwen3-VL-4B-BnB-NF4 \
+# 基础部署（单卡）
+CUDA_VISIBLE_DEVICES=1 vllm serve /path/to/Qwen3-VL-4B-BnB-NF4 \
     --quantization bitsandbytes \
     --load-format bitsandbytes \
     --dtype bfloat16 \
     --max-model-len 8192 \
+    --gpu-memory-utilization 0.90 \
     --port 7890 \
     --api-key abc123 \
     --served-model-name Qwen/Qwen3-VL-4B-BnB
 
-# 完整部署（带工具调用支持）
-vllm serve /path/to/Qwen3-VL-4B-BnB-NF4 \
+# 完整部署（带工具调用 + 显存控制）
+CUDA_VISIBLE_DEVICES=1 vllm serve /path/to/Qwen3-VL-4B-BnB-NF4 \
     --quantization bitsandbytes \
     --load-format bitsandbytes \
     --dtype bfloat16 \
     --max-model-len 10240 \
-    --port 7890 \
-    --api-key abc123 \
     --gpu-memory-utilization 0.85 \
     --max-num-seqs 10 \
+    --port 7890 \
+    --api-key abc123 \
+    --served-model-name Qwen/Qwen3-VL-4B-BnB \
     --enable-auto-tool-choice \
     --tool-call-parser qwen3_xml
 ```
+
+| 参数 | 说明 |
+|------|------|
+| `CUDA_VISIBLE_DEVICES=1` | 指定 GPU（推荐 A6000 等大显存卡） |
+| `--gpu-memory-utilization 0.90` | 显存占用比例（0.0~1.0，默认 0.9） |
+| `--max-model-len 8192` | 最大序列长度（越大显存占用越多） |
+| `--max-num-seqs 10` | 最大并发请求数 |
 
 ### 测试推理
 
