@@ -322,12 +322,20 @@ def quantize_model(args):
         calib_messages = [[{'role': 'user', 'content': text}] for text in calib_texts]
         print(f'  校准数据已转换为聊天格式，共 {len(calib_messages)} 条')
 
-        # 检查校准数据是否包含图像
+        # 检查校准数据是否包含图像（检查值是否非空，避免字段存在但值为 None 的误判）
         has_image_in_data = any(
-            'image' in msg or 'images' in msg
+            sample.get('image') or sample.get('images')
             for sample in calib_data if isinstance(sample, dict)
-            for msg in ([sample] if isinstance(sample, dict) else sample)
         )
+        # 调试：打印第一条数据的 keys 和 image 字段
+        if calib_data and isinstance(calib_data[0], dict):
+            sample_keys = list(calib_data[0].keys())
+            print(f'  数据字段: {sample_keys}')
+            print(f'  has_image_in_data: {has_image_in_data}')
+            if 'image' in calib_data[0]:
+                print(f'  image 值: {repr(calib_data[0].get("image"))}')
+            if 'images' in calib_data[0]:
+                print(f'  images 值: {repr(calib_data[0].get("images"))}')
 
         # 纯文本校准（无图像）时，gptqmodel 的 cache_inputs 将 input_ids 放在 CPU
         # （因无 pixel_values，data_device=CPU），但 pre_quantize_generate_hook_start
