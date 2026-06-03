@@ -199,11 +199,9 @@ def quantize_model(args):
     try:
         import swift
         print('✓ 已加载 ms-swift')
-    except ImportError as e:
+    except (ImportError, Exception) as e:
         print(f'⚠ ms-swift 未安装或不兼容，跳过: {e}')
         print('  如果使用 Qwen3-VL 标准模型，不需要 ms-swift')
-
-    from transformers import AutoProcessor
 
     if model_type in ('qwen3_vl', 'qwen2_vl', 'multimodal'):
         # 多模态模型使用 AutoModelForVision2Seq（需要 transformers >= 4.57.0）
@@ -243,7 +241,17 @@ def quantize_model(args):
                     device_map="auto",
                     trust_remote_code=True,
                 )
-        processor = AutoProcessor.from_pretrained(str(model_path), trust_remote_code=True)
+
+        # 加载处理器（回退到 AutoTokenizer）
+        try:
+            from transformers import AutoProcessor
+            processor = AutoProcessor.from_pretrained(str(model_path), trust_remote_code=True)
+            print('✓ 使用 AutoProcessor')
+        except (ImportError, Exception):
+            from transformers import AutoTokenizer
+            processor = AutoTokenizer.from_pretrained(str(model_path), trust_remote_code=True)
+            print('✓ AutoProcessor 不可用，使用 AutoTokenizer')
+
         print('✓ 多模态模型加载完成')
     else:
         # 纯文本模型
