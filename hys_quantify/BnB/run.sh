@@ -56,7 +56,9 @@ if [[ "$DOUBLE_QUANT" == "true" ]]; then
         --double_quant \
         --compute_dtype $COMPUTE_DTYPE \
         --max_shard_size $MAX_SHARD_SIZE \
-        --use_safetensors
+        --use_safetensors \
+        --copy_config \
+        --official_model $OFFICIAL_MODEL
 else
     CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES python quantize_bnb.py \
         --model $MERGED_MODEL \
@@ -64,7 +66,9 @@ else
         --bits $BITS \
         --compute_dtype $COMPUTE_DTYPE \
         --max_shard_size $MAX_SHARD_SIZE \
-        --use_safetensors
+        --use_safetensors \
+        --copy_config \
+        --official_model $OFFICIAL_MODEL
 fi
 
 echo ""
