@@ -190,7 +190,7 @@ bash run.sh
 python verify_bnb.py --model /media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-BnB-NF4 --bits 4
 
 # 使用 vLLM 部署
-CUDA_VISIBLE_DEVICES=2 vllm serve /media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-BnB-NF4 \
+CUDA_VISIBLE_DEVICES=1 vllm serve /media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-BnB-NF4 \
     --api-key abc123 \
     --served-model-name Qwen/Qwen3-VL-4B-AWQ \
     --max-model-len 10240 \

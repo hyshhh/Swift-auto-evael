@@ -23,7 +23,7 @@ bash run.sh
 python verify_bnb.py --model /path/to/output --bits 4
 
 # 4. vLLM 部署
-CUDA_VISIBLE_DEVICES=2 vllm serve /path/to/output \
+CUDA_VISIBLE_DEVICES=1 vllm serve /path/to/output \
     --api-key abc123 \
     --served-model-name Qwen/Qwen3-VL-4B-AWQ \
     --max-model-len 10240 \
@@ -79,7 +79,7 @@ CUDA_VISIBLE_DEVICES=2 vllm serve /path/to/output \
 ### 部署命令
 
 ```bash
-CUDA_VISIBLE_DEVICES=2 vllm serve /media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-BnB-NF4 \
+CUDA_VISIBLE_DEVICES=1 vllm serve /media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-BnB-NF4 \
     --api-key abc123 \
     --served-model-name Qwen/Qwen3-VL-4B-AWQ \
     --max-model-len 10240 \
@@ -92,7 +92,7 @@ CUDA_VISIBLE_DEVICES=2 vllm serve /media/ddc/新加卷/hys/hysnew3/model/Qwen3-V
 
 | 参数 | 说明 |
 |------|------|
-| `CUDA_VISIBLE_DEVICES=2` | 指定 GPU 编号 |
+| `CUDA_VISIBLE_DEVICES=1` | 指定 GPU 编号（A6000） |
 | `--gpu-memory-utilization 0.15` | 显存占用比例（0.0~1.0，默认 0.9） |
 | `--max-model-len 10240` | 最大序列长度 |
 | `--max-num-seqs 10` | 最大并发请求数 |
