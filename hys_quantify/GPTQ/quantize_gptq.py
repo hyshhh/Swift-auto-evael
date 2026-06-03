@@ -310,15 +310,18 @@ def quantize_model(args):
     # 步骤 4: 执行量化
     print('步骤 4: 执行量化...')
 
-    # 提取纯文本列表（gptqmodel 只接受文本列表）
+    # 提取纯文本列表
     if calib_data and isinstance(calib_data[0], dict):
         calib_texts = [item['text'] for item in calib_data if 'text' in item]
     else:
         calib_texts = calib_data if calib_data else []
 
-    # gptqmodel 量化方式（calibration_dataset 作为位置参数，batch_size 作为关键字参数）
+    # gptqmodel 的 Qwen3-VL prepare_dataset 要求聊天消息格式（字典列表）
+    # 将纯文本包装为 [{"role": "user", "content": text}] 格式
     if calib_texts:
-        model.quantize(calib_texts, batch_size=args.batch_size)
+        calib_messages = [[{'role': 'user', 'content': text}] for text in calib_texts]
+        print(f'  校准数据已转换为聊天格式，共 {len(calib_messages)} 条')
+        model.quantize(calib_messages, batch_size=args.batch_size)
     else:
         model.quantize()
 
