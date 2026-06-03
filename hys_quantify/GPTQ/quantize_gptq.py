@@ -333,8 +333,8 @@ def quantize_model(args):
         # （因无 pixel_values，data_device=CPU），但 pre_quantize_generate_hook_start
         # 会把 embed_tokens 移到 CUDA，导致设备不匹配。
         # 修复：monkey-patch 掉该 hook，让 embed_tokens 留在 CPU。
-        if not has_image_in_data and has_visual:
-            print('  ⚠ 多模态模型 + 纯文本校准：禁用 pre_quantize_generate_hook 避免设备不匹配')
+        if not has_image_in_data:
+            print('  ⚠ 纯文本校准：禁用 pre_quantize_generate_hook 避免设备不匹配')
             original_hook = model.pre_quantize_generate_hook_start
             model.pre_quantize_generate_hook_start = lambda: None
             try:
