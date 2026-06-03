@@ -38,8 +38,30 @@ if LOCAL_MODE:
     MODEL_NAME = LOCAL_MODEL_NAME
     API_KEY = LOCAL_API_KEY
 
-# 提示词
-PROMPT = """你是一个专业的船舶弦号识别专家。
+# ==================== 提示词配置 ====================
+# 模式选择: "position" = 仅输出坐标, "full" = 输出坐标+弦号+描述
+PROMPT_MODE = "position"
+
+# 提示词1: 仅输出坐标（轻量，速度快）
+PROMPT_POSITION = """你是一个专业的弦号识别专家。
+
+任务：识别图片中船体侧面的弦号位置，输出其中心点的归一化坐标。
+
+输出格式（严格遵守）：
+{"x": float, "y": float}
+其中 x 和 y 是归一化坐标（0-1之间），表示弦号中心点在图片中的位置。
+x=0 表示图片最左边，x=1 表示图片最右边
+y=0 表示图片最上边，y=1 表示图片最下边
+
+要求：
+1. 优先关注船体侧面区域，重点关注船体侧面模糊区域
+2. 即使模糊、遮挡、低分辨率，也必须尽量估计其中心位置
+3. 每张图必定有一个弦号
+
+只输出 JSON，不要输出其他任何内容。"""
+
+# 提示词2: 输出坐标+弦号+描述（完整信息）
+PROMPT_FULL = """你是一个专业的船舶弦号识别专家。
 
 任务：识别图片中船体侧面的弦号，输出弦号位置、弦号内容和船体描述。
 
@@ -59,6 +81,9 @@ PROMPT = """你是一个专业的船舶弦号识别专家。
 3. 每张图必定有一个弦号
 
 只输出 JSON，不要输出其他任何内容。"""
+
+# 根据模式选择提示词
+PROMPT = PROMPT_FULL if PROMPT_MODE == "full" else PROMPT_POSITION
 
 
 def parse_args():
@@ -145,8 +170,9 @@ def parse_response(response_text):
             y = float(data.get('y', 0.5))
             default_result['x'] = max(0.0, min(1.0, x))
             default_result['y'] = max(0.0, min(1.0, y))
-            default_result['hull_number'] = str(data.get('hull_number', 'unknown'))
-            default_result['description'] = str(data.get('description', ''))
+            if PROMPT_MODE == "full":
+                default_result['hull_number'] = str(data.get('hull_number', 'unknown'))
+                default_result['description'] = str(data.get('description', ''))
             return default_result
     except (json.JSONDecodeError, KeyError, ValueError):
         pass
@@ -160,15 +186,14 @@ def parse_response(response_text):
         except ValueError:
             pass
 
-    # 尝试提取弦号
-    hull_match = re.search(r'"hull_number"\s*:\s*"([^"]*)"', response_text)
-    if hull_match:
-        default_result['hull_number'] = hull_match.group(1)
-
-    # 尝试提取描述
-    desc_match = re.search(r'"description"\s*:\s*"([^"]*)"', response_text)
-    if desc_match:
-        default_result['description'] = desc_match.group(1)
+    # full 模式下尝试提取弦号和描述
+    if PROMPT_MODE == "full":
+        hull_match = re.search(r'"hull_number"\s*:\s*"([^"]*)"', response_text)
+        if hull_match:
+            default_result['hull_number'] = hull_match.group(1)
+        desc_match = re.search(r'"description"\s*:\s*"([^"]*)"', response_text)
+        if desc_match:
+            default_result['description'] = desc_match.group(1)
 
     return default_result
 
@@ -302,8 +327,9 @@ def main():
             # 打印结果（含单帧速度）
             print(f'\n✓ {Path(image_path).name}')
             print(f'  坐标: ({result["x"]:.3f}, {result["y"]:.3f})')
-            print(f'  弦号: {result["hull_number"]}')
-            print(f'  描述: {result["description"]}')
+            if PROMPT_MODE == "full":
+                print(f'  弦号: {result["hull_number"]}')
+                print(f'  描述: {result["description"]}')
             print(f'  耗时: {result["latency"]:.2f}s | FPS: {result["fps"]:.2f}')
             print(f'  输出: {result["output"]}')
 
