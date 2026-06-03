@@ -22,21 +22,32 @@ from tqdm import tqdm
 
 # ==================== 配置 ====================
 # 模式选择: "local" | "remote" | "mimo"
-MODE = os.environ.get("OCR_MODE", "local")
+MODE = "local"
 
-# 从环境变量读取配置，无则使用默认值
+# 远程 API 配置
+API_KEY = "sk-dllnqafnfsrvpxtttcepjrbyljrjausbjblbjbodtpvlmmri"
+API_URL = "https://api.siliconflow.cn/v1/chat/completions"
+MODEL_NAME = "Tongyi-MAI/Z-Image-Turbo"
+
+# 本地模式（vLLM 本地服务）
+LOCAL_API_URL = "http://localhost:7890/v1/chat/completions"
+LOCAL_MODEL_NAME = "Qwen/Qwen3-VL-4B"
+LOCAL_API_KEY = "abc123"
+
+# MiMo-VL 配置
+MIMO_API_URL = "https://token-plan-sgp.xiaomimimo.com/v1"
+MIMO_MODEL_NAME = "mimo-v2.5"
+MIMO_API_KEY = "tp-slahyto80ehrqjq1vflzugk7nihzuz1feb4z93y2n8dl2lce"
+
+# 根据模式选择配置
 if MODE == "local":
-    API_URL = os.environ.get("LOCAL_API_URL", "http://localhost:7890/v1/chat/completions")
-    MODEL_NAME = os.environ.get("LOCAL_MODEL_NAME", "Qwen/Qwen3-VL-4B")
-    API_KEY = os.environ.get("LOCAL_API_KEY", "abc123")
+    API_URL = LOCAL_API_URL
+    MODEL_NAME = LOCAL_MODEL_NAME
+    API_KEY = LOCAL_API_KEY
 elif MODE == "mimo":
-    API_URL = os.environ.get("MIMO_API_URL", "https://api.siliconflow.cn/v1/chat/completions")
-    MODEL_NAME = os.environ.get("MIMO_MODEL_NAME", "MiMo-VL-7B")
-    API_KEY = os.environ.get("MIMO_API_KEY", "")
-else:  # remote
-    API_URL = os.environ.get("API_URL", "")
-    MODEL_NAME = os.environ.get("MODEL_NAME", "")
-    API_KEY = os.environ.get("API_KEY", "")
+    API_URL = MIMO_API_URL
+    MODEL_NAME = MIMO_MODEL_NAME
+    API_KEY = MIMO_API_KEY
 
 # ==================== 提示词配置 ====================
 # 模式选择: "position" = 仅输出坐标, "full" = 输出坐标+弦号+描述
