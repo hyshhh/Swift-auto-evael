@@ -1,266 +1,173 @@
-# Qwen3.5 多模态模型量化指南
+# 量化方法对比指南
 
-> 支持 AWQ、GPTQ、BnB 三种主流量化方法
-
-## 一句话总结
-
-> **学习/实验用 BnB，生产部署用 GPTQ/AWQ。**
+> 本文档重点对比各种量化方法，帮助你快速选择。具体命令请看 [README.md](README.md)
 
 ---
 
 ## 快速选择
 
-| 场景 | 推荐方法 | 原因 |
-|------|----------|------|
-| 快速实验 | **BnB** | 一行代码，分钟级完成 |
-| QLoRA 微调 | **BnB** | 原生支持，显存节省 60%+ |
-| 生产部署 | **GPTQ/AWQ** | 推理速度快，显存效率高 |
-| 多模态推理 | **GPTQ** | 同时量化 LLM 和视觉编码器 |
-| 显存受限 | **GPTQ/AWQ** | 压缩率 75%，显存占用最低 |
+| 场景 | 推荐 | 原因 |
+|------|------|------|
+| 快速实验 / 学习 | **BnB NF4** | 不需要校准数据，分钟级完成 |
+| QLoRA 微调 | **BnB NF4** | 原生支持，显存节省 60%+ |
+| 生产部署 | **GPTQ INT4** | 推理快，vLLM 原生支持 |
+| 多模态推理 | **GPTQ INT4** | 同时量化 LLM + ViT |
+| 显存受限 | **GPTQ / AWQ** | 压缩率最高 |
+
+**一句话：学习用 BnB，部署用 GPTQ。**
 
 ---
 
-## 三种方法对比
+## 一、三种方法总览
 
 | 特性 | BnB NF4 | GPTQ INT4 | AWQ INT4 |
 |------|---------|-----------|----------|
-| **易用性** | ⭐⭐⭐ 极简 | ⭐⭐ 中等 | ⭐⭐ 中等 |
-| **量化速度** | ⚡ 极快（分钟） | 慢（小时） | 中等 |
-| **推理速度** | 中等 | ⚡ 快 | ⚡ 快 |
-| **显存效率** | 中等 | ⚡ 高 | ⚡ 高 |
-| **精度** | 高 | 中 | 中 |
-| **多模态** | ⚡ 原生支持 | ⚡ 原生支持 | ⚠ 需 patch |
-| **QLoRA** | ⚡ 原生支持 | 需配置 | 需配置 |
-| **部署** | ⚠ 有限 | ⚡ vLLM/LMDeploy | ⚡ vLLM |
+| 量化速度 | ⚡ 分钟 | 慢（小时） | 中等 |
+| 推理速度 | 慢 ~10 tok/s | ⚡ 快 ~40 tok/s | ⚡ 快 ~35 tok/s |
+| 加载速度 | 慢（5-15 分钟） | 快 | 快 |
+| 模型大小 | ~2.5 GB | ~1 GB | ~1 GB |
+| 显存占用 | ~4 GB | ~2 GB | ~2 GB |
+| 精度损失 | < 1% | < 2% | < 1% |
+| 校准数据 | ❌ 不需要 | ✅ 需要 | ✅ 需要 |
+| 多模态 | LLM 量化，ViT 保留 | 全部量化 | LLM 量化，ViT 保留 |
+| QLoRA 微调 | ✅ 原生支持 | 需额外配置 | 需额外配置 |
+| vLLM 支持 | ⚠ 需装 bnb 库 | ✅ 内置 | ✅ 内置 |
+| 硬件要求 | 任意 GPU | 任意 GPU | 任意 GPU |
 
 ---
 
-## 文件结构
+## 二、量化格式对比
+
+### 4-bit 格式
+
+| 格式 | 类型 | 级别数 | 分布 | 用在哪 |
+|------|------|--------|------|--------|
+| **INT4** | 整数 | 16 | 均匀 | GPTQ / AWQ |
+| **FP4** | 浮点 (E2M1) | 16 | 非均匀（有指数位） | bitsandbytes（不推荐） |
+| **NF4** | 正态浮点 | 16 | 非均匀（匹配正态分布） | bitsandbytes（推荐） |
 
 ```
-hys_quantify/
-├── README-量化方法.md      # 本文档（总览）
-├── AWQ/                    # AWQ 量化
-│   ├── README.md
-│   ├── run.sh              # 一键启动（支持选择 AutoAWQ/llmcompressor）
-│   ├── run_llmcompressor.sh
-│   ├── quantize_autoawq.py # AutoAWQ 量化（推荐，vLLM 原生支持）
-│   └── quantize_awq.py     # llmcompressor 量化
-├── GPTQ/                   # GPTQ 量化
-│   ├── README.md
-│   ├── run_gptq.sh
-│   └── quantize_gptq.py
-├── BnB/                    # BnB NF4 量化
-│   ├── README.md
-│   ├── run.sh
-│   ├── quantize.py
-│   ├── verify.py
-│   └── config_qlora.json
-└── hys-readme-量化.md      # 完整文档
+INT4:  |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+       -8        -4        0         4         8
+       ← 均匀分布，间距相等 →
+
+NF4:   |||||||  ||||  |||  ||  |   |    |     |      |
+       -1.0   -0.5   0   0.5  1.0
+       ← 非均匀，靠近 0 密，远离 0 疏 →
+
+FP4:   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |
+       -6       -2       0        2        6
+       ← 有指数位，小间距 → 大间距
 ```
 
----
+### 8-bit 格式
 
-## 快速上手
+| 格式 | 结构 | 尾数精度 | 范围 | 用在哪 |
+|------|------|----------|------|--------|
+| **FP8 E4M3** | 1+4+3 | 高（8 级/指数） | 中 | H100/4090 |
+| **FP8 E5M2** | 1+5+2 | 中（4 级/指数） | 大 | 梯度存储 |
+| **INT8** | 整数 | 256 级均匀 | 通用 | bitsandbytes |
 
-### 方法一：BnB NF4（最简单）
+### 精度排序
 
-```bash
-cd BnB
-conda activate bnb
-bash run.sh
 ```
-
-### 方法二：GPTQ（推荐生产）
-
-```bash
-cd GPTQ
-conda activate swifthys
-bash run.sh
-```
-
-### 方法三：AWQ（vLLM 原生支持）
-
-```bash
-cd AWQ
-conda activate llmpress
-bash run.sh
-```
-
-> **推荐使用 AutoAWQ**，vLLM 原生支持，无需额外配置。
-> 参考：[vLLM AutoAWQ 文档](https://docs.vllm.ai/en/latest/features/quantization/auto_awq.html)
-
----
-
-## 环境准备
-
-### BnB 环境
-
-```bash
-conda create -n bnb python=3.10 -y
-conda activate bnb
-pip install bitsandbytes accelerate peft transformers
-```
-
-### GPTQ 环境
-
-```bash
-conda create -n swifthys python=3.10 -y
-conda activate swifthys
-pip install ms-swift gptqmodel optimum accelerate
-```
-
-### AWQ 环境
-
-```bash
-conda create -n llmpress python=3.10 -y
-conda activate llmpress
-pip install autoawq ms-swift
-
-# 如需使用 llmcompressor 方式
-pip install llmcompressor
+FP16 > FP8 > NF4 ≈ GPTQ ≈ AWQ > FP4
+      (8bit)  (4bit)              (4bit)
 ```
 
 ---
 
-## 性能对比
+## 三、量化原理对比
 
-### 显存占用（Qwen3.5-2B）
-
-| 方法 | 显存占用 | 相对 FP16 |
-|------|----------|-----------|
-| FP16 | 4.2 GB | 100% |
-| BnB NF4 | 2.1 GB | 50% |
-| GPTQ INT4 | 1.6 GB | 38% |
-| AWQ INT4 | 1.7 GB | 40% |
-
-### 推理速度（生成 512 tokens）
-
-| 方法 | 速度 (tokens/s) | 相对速度 |
-|------|-----------------|----------|
-| FP16 | 28.5 | 100% |
-| BnB NF4 | 15.2 | 53% |
-| GPTQ INT4 | 23.7 | 83% |
-| AWQ INT4 | 22.1 | 78% |
-
----
-
-## 多模态支持
-
-### Qwen3.5 多模态模型结构
+### BnB NF4（动态量化）
 
 ```
-Qwen3.5-2B
-├── 语言模型 (LLM)
-│   ├── Embedding 层
-│   ├── Transformer 层 × N
-│   └── LM Head
-└── 视觉编码器 (Vision Encoder)
-    ├── Patch Embedding
-    ├── Transformer 层 × M
-    └── Projection 层
+加载时：FP16 权重 → NF4 量化（16 个预设的非均匀级别）→ 存储
+推理时：NF4 权重 → 实时反量化 → FP16 计算 → 结果
+                       ↑
+                  每次推理都要反量化，所以慢
 ```
 
-### 量化策略
+### GPTQ INT4（静态量化）
 
-| 方法 | LLM 部分 | 视觉编码器 |
-|------|----------|------------|
-| BnB | NF4 量化 | FP16 保持 |
-| GPTQ | GPTQ 量化 | GPTQ 量化 |
-| AWQ | AWQ 量化 | AWQ 量化 |
-
----
-
-## 常见问题
-
-### Q1: 三种方法怎么选？
-
-**答：根据使用场景选择**
-
-- 快速实验/学习 → **BnB**
-- QLoRA 微调 → **BnB**
-- 生产部署 → **GPTQ/AWQ**
-- 多模态推理 → **GPTQ**
-
-### Q2: 量化后精度损失大吗？
-
-**答：很小**
-
-- BnB NF4: < 1%
-- GPTQ INT4: < 2%
-- AWQ INT4: < 1%
-
-### Q3: 量化后还能微调吗？
-
-**答：可以，推荐 QLoRA**
-
-```bash
-# BnB + QLoRA（最简单）
-swift sft --model /path/to/model-bnb --train_type lora ...
-
-# GPTQ + QLoRA（需要额外配置）
-swift sft --model /path/to/model-gptq --train_type lora ...
+```
+量化时：FP16 权重 + 校准数据 → 逐层优化（最小化重建误差）→ INT4 + scale 存储
+推理时：INT4 权重 + scale → 预计算好的参数 → 直接计算 → 结果
+                                              ↑
+                                         不需要实时反量化，所以快
 ```
 
-### Q4: 量化后怎么部署？
+### AWQ INT4（静态量化）
 
-**答：推荐 GPTQ/AWQ**
-
-```bash
-# vLLM（GPTQ）
-vllm serve /path/to/model-gptq --quantization gptq
-
-# vLLM（AWQ，原生支持）
-vllm serve /path/to/model-awq --quantization awq
-
-# LMDeploy
-lmdeploy serve /path/to/model-gptq --model-format gptq
+```
+量化时：FP16 权重 + 校准数据 → 识别重要通道 → 保护重要权重 → INT4 + scale 存储
+推理时：INT4 权重 + scale → 预计算好的参数 → 直接计算 → 结果
+                                              ↑
+                                         不需要实时反量化，所以快
 ```
 
 ---
 
-## 量化原理简述
+## 四、硬件兼容性
 
-### BnB (bitsandbytes)
+| GPU | 架构 | FP8 | FlashAttention | 推荐量化方法 |
+|---|---|---|---|---|
+| RTX 2080 Ti | Turing | ❌ | ❌ | GPTQ / AWQ |
+| RTX A6000 | Ampere | ❌ | ✅ | GPTQ / AWQ |
+| RTX 4090 | Ada Lovelace | ✅ | ✅ | FP8 / GPTQ |
+| H100 | Hopper | ✅ | ✅ | FP8 / GPTQ |
 
-```
-权重分布 (正态) → NF4 量化 (非均匀级别) → 4-bit 存储
-                    ↑
-            匹配正态分布，理论最优
-```
+> FP8 需要 H100 或 RTX 4090+，其他 GPU 用 GPTQ/AWQ。
 
-### GPTQ
+---
 
-```
-权重矩阵 → 逐层量化 → 最小化重建误差 → 4-bit 存储
-              ↑
-        基于 OBS，考虑权重间相关性
-```
+## 五、vLLM 部署对比
 
-### AWQ
+| 方法 | vLLM 参数 | 需要额外安装 | 加载时间 | 推理速度 |
+|------|-----------|-------------|----------|----------|
+| BnB NF4 | `--quantization bitsandbytes` | `bitsandbytes>=0.48.1` | 5-15 分钟 | 慢 |
+| GPTQ INT4 | `--quantization gptq` | 无 | 快 | 快 |
+| AWQ INT4 | `--quantization awq` | 无 | 快 | 快 |
 
-```
-激活分布 → 识别重要通道 → 保护重要权重 → 4-bit 存储
-              ↑
-        激活感知，保护显著性
-```
+---
+
+## 六、模型大小对比（Qwen3-VL-4B）
+
+| 格式 | 模型大小 | 相对 FP16 | 显存占用 |
+|------|----------|-----------|----------|
+| FP16 | ~8 GB | 100% | ~16 GB |
+| FP8 | ~4 GB | 50% | ~8 GB |
+| BnB NF4 | ~2.5 GB | 31% | ~4 GB |
+| GPTQ INT4 | ~1 GB | 12.5% | ~2 GB |
+| AWQ INT4 | ~1 GB | 12.5% | ~2 GB |
+
+---
+
+## 七、常见问题
+
+**Q: 为什么 BnB 推理比 FP16 还慢？**
+A: BnB 是动态量化，每次推理都要把 4-bit 权重反量化成 FP16 再计算。GPTQ/AWQ 是静态量化，预计算好了，不需要实时反量化。
+
+**Q: NF4 比 INT4 精度高多少？**
+A: 差距很小。NF4 的 16 个级别基于正态分布优化，INT4 是均匀分布。实际测试精度损失都在 1-2% 以内。
+
+**Q: 为什么 BnB 加载要 5-15 分钟？**
+A: vLLM 的 BnB loader 需要实时把权重转换成 bitsandbytes 格式，这个过程很慢。GPTQ/AWQ 的权重已经是量化好的格式，加载很快。
+
+**Q: 量化后还能微调吗？**
+A: 可以。BnB 原生支持 QLoRA 微调，GPTQ/AWQ 需要额外配置。
+
+**Q: 我的 GPU 不支持 FlashAttention 怎么办？**
+A: RTX 2080 Ti 等 Turing 架构 GPU 不支持 FlashAttention。vLLM 部署时确保用 A6000（`CUDA_VISIBLE_DEVICES=1`）。
 
 ---
 
 ## 相关资源
 
+- [vLLM INT4 量化文档](https://docs.vllm.com.cn/en/latest/features/quantization/int4/)
+- [bitsandbytes](https://github.com/TimDettmers/bitsandbytes)
+- [GPTQModel](https://github.com/ModelCloud/GPTQModel)
+- [llmcompressor](https://github.com/vllm-project/llm-compressor)
+- [QLoRA 论文](https://arxiv.org/abs/2305.14314)
 - [AWQ 论文](https://arxiv.org/abs/2306.00978)
 - [GPTQ 论文](https://arxiv.org/abs/2210.17323)
-- [QLoRA 论文](https://arxiv.org/abs/2305.14314)
-- [bitsandbytes](https://github.com/TimDettmers/bitsandbytes)
-- [ms-swift](https://github.com/modelscope/ms-swift)
-
----
-
-## 更新日志
-
-### 2024-06-02
-- 初始版本
-- 支持 AWQ、GPTQ、BnB 三种量化方法
-- 支持 Qwen3.5 多模态模型
-- 完整文档和示例
