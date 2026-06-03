@@ -39,19 +39,23 @@ if LOCAL_MODE:
     API_KEY = LOCAL_API_KEY
 
 # 提示词
-PROMPT = """你是一个专业的弦号识别专家。
+PROMPT = """你是一个专业的船舶弦号识别专家。
 
-任务：识别图片中船体侧面的弦号位置，输出其中心点的归一化坐标。
+任务：识别图片中船体侧面的弦号，输出弦号位置、弦号内容和船体描述。
 
-输出格式（严格遵守）：
-{"x": float, "y": float}
-其中 x 和 y 是归一化坐标（0-1之间），表示弦号中心点在图片中的位置。
-x=0 表示图片最左边，x=1 表示图片最右边
-y=0 表示图片最上边，y=1 表示图片最下边
+输出格式（严格遵守 JSON）：
+{"x": float, "y": float, "hull_number": "string", "description": "string"}
+
+字段说明：
+- x, y：弦号中心点的归一化坐标（0-1之间）
+  x=0 表示图片最左边，x=1 表示图片最右边
+  y=0 表示图片最上边，y=1 表示图片最下边
+- hull_number：弦号内容（如 "531"、"DDG-1000" 等，无法识别则填 "unknown"）
+- description：船体简要描述（船型、颜色、大小、状态等，50字以内）
 
 要求：
 1. 优先关注船体侧面区域，重点关注船体侧面模糊区域
-2. 即使模糊、遮挡、低分辨率，也必须尽量估计其中心位置
+2. 即使模糊、遮挡、低分辨率，也必须尽量估计弦号位置
 3. 每张图必定有一个弦号
 
 只输出 JSON，不要输出其他任何内容。"""
@@ -124,8 +128,14 @@ def call_vlm_api(args, image_path):
     return result['choices'][0]['message']['content']
 
 
-def parse_coord(response_text):
-    """解析模型输出的坐标"""
+def parse_response(response_text):
+    """解析模型输出的坐标、弦号和描述"""
+    default_result = {
+        'x': 0.5, 'y': 0.5,
+        'hull_number': 'unknown',
+        'description': ''
+    }
+
     # 尝试从 JSON 格式提取
     try:
         match = re.search(r'\{[^{}]*\}', response_text, re.DOTALL)
@@ -133,10 +143,11 @@ def parse_coord(response_text):
             data = json.loads(match.group())
             x = float(data.get('x', 0.5))
             y = float(data.get('y', 0.5))
-            # 确保在 0-1 范围内
-            x = max(0.0, min(1.0, x))
-            y = max(0.0, min(1.0, y))
-            return x, y
+            default_result['x'] = max(0.0, min(1.0, x))
+            default_result['y'] = max(0.0, min(1.0, y))
+            default_result['hull_number'] = str(data.get('hull_number', 'unknown'))
+            default_result['description'] = str(data.get('description', ''))
+            return default_result
     except (json.JSONDecodeError, KeyError, ValueError):
         pass
 
@@ -144,16 +155,22 @@ def parse_coord(response_text):
     match = re.search(r'"x"\s*:\s*([\d.]+).*?"y"\s*:\s*([\d.]+)', response_text, re.DOTALL)
     if match:
         try:
-            x = float(match.group(1))
-            y = float(match.group(2))
-            x = max(0.0, min(1.0, x))
-            y = max(0.0, min(1.0, y))
-            return x, y
+            default_result['x'] = max(0.0, min(1.0, float(match.group(1))))
+            default_result['y'] = max(0.0, min(1.0, float(match.group(2))))
         except ValueError:
             pass
 
-    # 默认返回图片中心
-    return 0.5, 0.5
+    # 尝试提取弦号
+    hull_match = re.search(r'"hull_number"\s*:\s*"([^"]*)"', response_text)
+    if hull_match:
+        default_result['hull_number'] = hull_match.group(1)
+
+    # 尝试提取描述
+    desc_match = re.search(r'"description"\s*:\s*"([^"]*)"', response_text)
+    if desc_match:
+        default_result['description'] = desc_match.group(1)
+
+    return default_result
 
 
 def draw_result(image_path, x, y, box_size=100, line_width=3):
@@ -222,8 +239,9 @@ def process_single_image(args, image_path, output_dir):
     # 调用 API
     response_text = call_vlm_api(args, image_path)
 
-    # 解析坐标
-    x, y = parse_coord(response_text)
+    # 解析结果
+    result = parse_response(response_text)
+    x, y = result['x'], result['y']
 
     # 绘制结果
     result_img = draw_result(image_path, x, y, args.box_size, args.line_width)
@@ -241,6 +259,8 @@ def process_single_image(args, image_path, output_dir):
         'image': image_path,
         'x': x,
         'y': y,
+        'hull_number': result['hull_number'],
+        'description': result['description'],
         'output': output_path,
         'raw_response': response_text,
         'latency': latency,
@@ -282,6 +302,8 @@ def main():
             # 打印结果（含单帧速度）
             print(f'\n✓ {Path(image_path).name}')
             print(f'  坐标: ({result["x"]:.3f}, {result["y"]:.3f})')
+            print(f'  弦号: {result["hull_number"]}')
+            print(f'  描述: {result["description"]}')
             print(f'  耗时: {result["latency"]:.2f}s | FPS: {result["fps"]:.2f}')
             print(f'  输出: {result["output"]}')
 
