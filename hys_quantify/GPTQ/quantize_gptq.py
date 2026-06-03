@@ -256,6 +256,7 @@ def quantize_model(args):
         true_sequential=args.true_sequential,
         damp_percent=args.damp_percent,
         lm_head=args.lm_head,
+        offload_to_disk=False,  # 禁用 turtle 懒加载机制，直接加载到 CPU
     )
 
     # 步骤 2: 加载模型
@@ -322,35 +323,17 @@ def quantize_model(args):
         calib_messages = [[{'role': 'user', 'content': text}] for text in calib_texts]
         print(f'  校准数据已转换为聊天格式，共 {len(calib_messages)} 条')
 
-        # 检查校准数据是否包含图像（检查值是否非空，避免字段存在但值为 None 的误判）
-        has_image_in_data = any(
-            sample.get('image') or sample.get('images')
-            for sample in calib_data if isinstance(sample, dict)
-        )
-        # 调试：打印第一条数据的 keys 和 image 字段
-        if calib_data and isinstance(calib_data[0], dict):
-            sample_keys = list(calib_data[0].keys())
-            print(f'  数据字段: {sample_keys}')
-            print(f'  has_image_in_data: {has_image_in_data}')
-            if 'image' in calib_data[0]:
-                print(f'  image 值: {repr(calib_data[0].get("image"))}')
-            if 'images' in calib_data[0]:
-                print(f'  images 值: {repr(calib_data[0].get("images"))}')
-
-        # 纯文本校准（无图像）时，gptqmodel 的 cache_inputs 将 input_ids 放在 CPU
+        # 纯文本校准时，gptqmodel 的 cache_inputs 将 input_ids 放在 CPU
         # （因无 pixel_values，data_device=CPU），但 pre_quantize_generate_hook_start
         # 会把 embed_tokens 移到 CUDA，导致设备不匹配。
         # 修复：monkey-patch 掉该 hook，让 embed_tokens 留在 CPU。
-        if not has_image_in_data:
-            print('  ⚠ 纯文本校准：禁用 pre_quantize_generate_hook 避免设备不匹配')
-            original_hook = model.pre_quantize_generate_hook_start
-            model.pre_quantize_generate_hook_start = lambda: None
-            try:
-                model.quantize(calib_messages, batch_size=args.batch_size)
-            finally:
-                model.pre_quantize_generate_hook_start = original_hook
-        else:
+        print('  ⚠ 纯文本校准：禁用 pre_quantize_generate_hook 避免设备不匹配')
+        original_hook = model.pre_quantize_generate_hook_start
+        model.pre_quantize_generate_hook_start = lambda: None
+        try:
             model.quantize(calib_messages, batch_size=args.batch_size)
+        finally:
+            model.pre_quantize_generate_hook_start = original_hook
     else:
         model.quantize()
 
