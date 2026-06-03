@@ -293,8 +293,8 @@ def quantize_model(args):
         param_count = sum(p.numel() for p in module.parameters())
         print(f'  - {name}: {type(module).__name__} ({param_count / 1e6:.1f}M params)')
 
-    # 检查是否包含视觉编码器
-    has_visual = hasattr(inner_model, 'visual') or any('visual' in name for name, _ in inner_model.named_children())
+    # 检查是否包含视觉编码器（递归搜索，因为 visual 可能在深层）
+    has_visual = any('visual' in name for name, _ in model.named_modules())
     if has_visual:
         print('  ✓ 包含视觉编码器（多模态模型）')
     else:
