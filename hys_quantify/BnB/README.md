@@ -23,13 +23,15 @@ bash run.sh
 python verify_bnb.py --model /path/to/output --bits 4
 
 # 4. vLLM 部署
-CUDA_VISIBLE_DEVICES=1 vllm serve /path/to/output \
-    --quantization bitsandbytes \
-    --load-format bitsandbytes \
-    --dtype bfloat16 \
-    --max-model-len 8192 \
-    --gpu-memory-utilization 0.90 \
-    --port 7890
+CUDA_VISIBLE_DEVICES=2 vllm serve /path/to/output \
+    --api-key abc123 \
+    --served-model-name Qwen/Qwen3-VL-4B-AWQ \
+    --max-model-len 10240 \
+    --port 7890 \
+    --gpu-memory-utilization 0.15 \
+    --max-num-seqs 10 \
+    --enable-auto-tool-choice \
+    --tool-call-parser qwen3_xml
 ```
 
 ---
@@ -77,38 +79,25 @@ CUDA_VISIBLE_DEVICES=1 vllm serve /path/to/output \
 ### 部署命令
 
 ```bash
-# 基础部署（单卡）
-CUDA_VISIBLE_DEVICES=1 vllm serve /path/to/Qwen3-VL-4B-BnB-NF4 \
-    --quantization bitsandbytes \
-    --load-format bitsandbytes \
-    --dtype bfloat16 \
-    --max-model-len 8192 \
-    --gpu-memory-utilization 0.90 \
-    --port 7890 \
+CUDA_VISIBLE_DEVICES=2 vllm serve /media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-BnB-NF4 \
     --api-key abc123 \
-    --served-model-name Qwen/Qwen3-VL-4B-BnB
-
-# 完整部署（带工具调用 + 显存控制）
-CUDA_VISIBLE_DEVICES=1 vllm serve /path/to/Qwen3-VL-4B-BnB-NF4 \
-    --quantization bitsandbytes \
-    --load-format bitsandbytes \
-    --dtype bfloat16 \
+    --served-model-name Qwen/Qwen3-VL-4B-AWQ \
     --max-model-len 10240 \
-    --gpu-memory-utilization 0.85 \
-    --max-num-seqs 10 \
     --port 7890 \
-    --api-key abc123 \
-    --served-model-name Qwen/Qwen3-VL-4B-BnB \
+    --gpu-memory-utilization 0.15 \
+    --max-num-seqs 10 \
     --enable-auto-tool-choice \
     --tool-call-parser qwen3_xml
 ```
 
 | 参数 | 说明 |
 |------|------|
-| `CUDA_VISIBLE_DEVICES=1` | 指定 GPU（推荐 A6000 等大显存卡） |
-| `--gpu-memory-utilization 0.90` | 显存占用比例（0.0~1.0，默认 0.9） |
-| `--max-model-len 8192` | 最大序列长度（越大显存占用越多） |
+| `CUDA_VISIBLE_DEVICES=2` | 指定 GPU 编号 |
+| `--gpu-memory-utilization 0.15` | 显存占用比例（0.0~1.0，默认 0.9） |
+| `--max-model-len 10240` | 最大序列长度 |
 | `--max-num-seqs 10` | 最大并发请求数 |
+| `--enable-auto-tool-choice` | 启用工具调用 |
+| `--tool-call-parser qwen3_xml` | Qwen3 工具调用解析器 |
 
 ### 测试推理
 

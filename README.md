@@ -189,16 +189,16 @@ bash run.sh
 # 验证量化模型
 python verify_bnb.py --model /media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-BnB-NF4 --bits 4
 
-# 使用 vLLM 部署（指定 GPU 1 = A6000，显存占用 90%）
-CUDA_VISIBLE_DEVICES=1 vllm serve /media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-BnB-NF4 \
-    --quantization bitsandbytes \
-    --load-format bitsandbytes \
-    --dtype bfloat16 \
-    --max-model-len 8192 \
-    --gpu-memory-utilization 0.90 \
-    --port 7890 \
+# 使用 vLLM 部署
+CUDA_VISIBLE_DEVICES=2 vllm serve /media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-BnB-NF4 \
     --api-key abc123 \
-    --served-model-name Qwen/Qwen3-VL-4B-BnB
+    --served-model-name Qwen/Qwen3-VL-4B-AWQ \
+    --max-model-len 10240 \
+    --port 7890 \
+    --gpu-memory-utilization 0.15 \
+    --max-num-seqs 10 \
+    --enable-auto-tool-choice \
+    --tool-call-parser qwen3_xml
 ```
 
 ### GPTQ 量化
