@@ -72,7 +72,7 @@ conda activate swift
 
 CUDA_VISIBLE_DEVICES=1 \
 swift sft \
-    --model /media/ddc/新加卷/hys/hysnew/Qwen/Qwen3.5-2B \
+    --model /media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-Instruct \
     --quant_bits 4 \
     --tuner_type lora \
     --dataset /media/ddc/新加卷/hys/qmy/agent/data/sft_train.jsonl \
@@ -84,6 +84,7 @@ swift sft \
     --lora_rank 4 \
     --freeze_llm true \
     --freeze_vit true \
+    --freeze_aligner false \
     --lora_alpha 8 \
     --target_modules all-linear \
     --gradient_accumulation_steps 32 \
@@ -92,7 +93,7 @@ swift sft \
     --save_total_limit 2 \
     --logging_steps 5 \
     --max_length 2048 \
-    --output_dir output \
+    --output_dir /media/ddc/新加卷/hys/hysnew3/Swift-auto-evael/hys_quantify/GPTQ/output \
     --warmup_ratio 0.05 \
     --dataloader_num_workers 6 \
     --model_author swift \
