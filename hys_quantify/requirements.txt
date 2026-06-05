@@ -55,8 +55,12 @@ rich==15.0.0
 jinja2==3.1.6
 json-repair==0.59.10
 huggingface-hub==1.17.0
+protobuf==6.33.2
 psutil==7.2.2
 matplotlib==3.10.9
+
+# ==================== GGUF / llama.cpp 转换 ====================
+# llama.cpp 需要单独克隆并编译，见 GGUF/run.sh
 
 # ==================== 可选: 评估 ====================
 # rouge==1.0.1

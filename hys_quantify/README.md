@@ -1,6 +1,6 @@
 # 量化工具集
 
-> 支持 BnB NF4、GPTQ、AWQ 三种量化方法，适配 Qwen3-VL 多模态模型
+> 支持 BnB NF4、GPTQ、AWQ、GGUF 四种量化方法，适配 Qwen3-VL 多模态模型
 
 ---
 
@@ -21,6 +21,11 @@ pip install ms-swift gptqmodel optimum accelerate
 conda create -n llmpress python=3.10 -y
 conda activate llmpress
 pip install llmcompressor ms-swift
+
+# GGUF 量化环境
+conda create -n gguf python=3.10 -y
+conda activate gguf
+pip install -U huggingface_hub transformers sentencepiece protobuf numpy
 ```
 
 ---
@@ -48,6 +53,14 @@ bash run_gptq.sh
 ```bash
 conda activate llmpress
 cd AWQ
+bash run.sh
+```
+
+### GGUF 量化
+
+```bash
+conda activate gguf
+cd GGUF
 bash run.sh
 ```
 
@@ -141,19 +154,19 @@ vllm serve /media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-AWQ \
 
 ---
 
-## 五、三种方法对比
+## 五、四种方法对比
 
-| 特性 | BnB NF4 | GPTQ INT4 | AWQ INT4 |
-|------|---------|-----------|----------|
-| **易用性** | ⭐⭐⭐ 极简 | ⭐⭐ 中等 | ⭐⭐ 中等 |
-| **量化速度** | ⚡ 极快（分钟） | 慢（小时） | 中等 |
-| **推理速度** | 慢（~10 tok/s） | ⚡ 快（~40 tok/s） | ⚡ 快（~35 tok/s） |
-| **显存效率** | 中等 | ⚡ 高 | ⚡ 高 |
-| **精度** | 高 | 中 | 中 |
-| **多模态** | ⚡ 原生支持 | ⚡ 原生支持 | ⚠ 需 patch |
-| **QLoRA** | ⚡ 原生支持 | 需配置 | 需配置 |
-| **vLLM 部署** | ⚠ 慢（需装 bnb） | ✅ 快 | ✅ 快 |
-| **校准数据** | 不需要 | 需要 | 需要 |
+| 特性 | BnB NF4 | GPTQ INT4 | AWQ INT4 | GGUF |
+|------|---------|-----------|----------|------|
+| **易用性** | ⭐⭐⭐ 极简 | ⭐⭐ 中等 | ⭐⭐ 中等 | ⭐⭐ 依赖 llama.cpp |
+| **量化速度** | ⚡ 极快（分钟） | 慢（小时） | 中等 | 中等 |
+| **推理速度** | 慢（~10 tok/s） | ⚡ 快（~40 tok/s） | ⚡ 快（~35 tok/s） | 取决于 llama.cpp 后端 |
+| **显存效率** | 中等 | ⚡ 高 | ⚡ 高 | 高 |
+| **精度** | 高 | 中 | 中 | 取决于量化类型 |
+| **多模态** | ⚡ 原生支持 | ⚡ 原生支持 | ⚠ 需 patch | ⚠ 取决于 llama.cpp 支持 |
+| **QLoRA** | ⚡ 原生支持 | 需配置 | 需配置 | 不适合训练 |
+| **vLLM 部署** | ⚠ 慢（需装 bnb） | ✅ 快 | ✅ 快 | ❌ 非 vLLM 常规格式 |
+| **校准数据** | 不需要 | 需要 | 需要 | 不需要 |
 
 ### 适用场景
 
@@ -164,6 +177,7 @@ vllm serve /media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-AWQ \
 | 生产部署 | **GPTQ** | 推理快，vLLM 原生支持 |
 | 多模态推理 | **GPTQ** | 同时量化 LLM + ViT |
 | 显存受限 | **GPTQ/AWQ** | 压缩率 75%，显存占用最低 |
+| 本地推理生态 | **GGUF** | 适合 llama.cpp / Ollama / LM Studio |
 
 ---
 
@@ -205,6 +219,12 @@ vllm serve /media/ddc/新加卷/hys/hysnew3/model/Qwen3-VL-4B-AWQ \
 推理时：预计算好的量化参数 → 直接计算（快）
 ```
 
+**GGUF**（文件格式 + 量化）：
+```
+Hugging Face 权重 → llama.cpp 转换为 GGUF → Q4_K_M/Q5_K_M/Q8_0 等量化
+推理时：由 llama.cpp 生态直接加载 .gguf 文件
+```
+
 ### 为什么 BnB 推理慢？
 
 ```
@@ -237,6 +257,7 @@ Qwen3VLForConditionalGeneration
 | BnB | NF4 量化 | FP16 保持 |
 | GPTQ | GPTQ 量化 | GPTQ 量化（同时量化） |
 | AWQ | AWQ 量化 | FP16 保持（不量化） |
+| GGUF | 转换为 GGUF 后按类型量化 | 取决于 llama.cpp 对模型结构的支持 |
 
 ---
 
@@ -265,11 +286,14 @@ hys_quantify/
 │   ├── quantize_gptq.py     # 量化脚本
 │   ├── run_gptq_swift.py    # ms-swift 量化
 │   └── run_gptq.sh          # 启动脚本
-└── AWQ/                     # AWQ 量化
-    ├── quantize_awq.py      # llmcompressor 量化
-    ├── quantize_autoawq.py  # AutoAWQ 量化（实验性）
-    ├── run.sh               # 启动脚本
-    └── run_llmcompressor.sh
+├── AWQ/                     # AWQ 量化
+│   ├── quantize_awq.py      # llmcompressor 量化
+│   ├── quantize_autoawq.py  # AutoAWQ 量化（实验性）
+│   ├── run.sh               # 启动脚本
+│   └── run_llmcompressor.sh
+└── GGUF/                    # GGUF 转换与量化
+    ├── README.md            # 使用说明
+    └── run.sh               # llama.cpp 转换与量化脚本
 ```
 
 ---
@@ -288,8 +312,11 @@ A: `save_pretrained()` 和 safetensors 对 BnB 参数有兼容性问题，脚本
 **Q: vLLM 加载 BnB 模型很慢？**
 A: BnB 是动态量化，每次加载都要实时转换，约 5-15 分钟。GPTQ/AWQ 加载快得多。
 
-**Q: 三种方法怎么选？**
-A: 快速实验/QLoRA → BnB，生产部署 → GPTQ，传统模型 → AWQ。
+**Q: 四种方法怎么选？**
+A: 快速实验/QLoRA → BnB，生产部署 → GPTQ，传统模型 → AWQ，本地推理生态 → GGUF。
+
+**Q: GGUF 能直接用于 vLLM 吗？**
+A: 不建议。GGUF 主要用于 llama.cpp、Ollama、LM Studio 等生态；vLLM 部署继续优先使用 GPTQ/AWQ/BnB。
 
 ---
 
@@ -299,4 +326,6 @@ A: 快速实验/QLoRA → BnB，生产部署 → GPTQ，传统模型 → AWQ。
 - [bitsandbytes](https://github.com/TimDettmers/bitsandbytes)
 - [GPTQModel](https://github.com/ModelCloud/GPTQModel)
 - [llmcompressor](https://github.com/vllm-project/llm-compressor)
+- [Hugging Face GGUF 文档](https://huggingface.co/docs/hub/en/gguf)
+- [llama.cpp](https://github.com/ggml-org/llama.cpp)
 - [QLoRA 论文](https://arxiv.org/abs/2305.14314)
